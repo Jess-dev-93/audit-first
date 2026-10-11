@@ -1,0 +1,333 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { normaliseAuditUrl } from '../lib/normaliseAuditUrl'
+
+const EXAMPLE_SITES = [
+  {
+    label: 'Plumber Website',
+    url: 'https://joesplumbing.com.au/',
+  },
+  {
+    label: 'Law Firm Website',
+    url: 'https://smithlegal.com.au/',
+  },
+  {
+    label: 'Dental Website',
+    url: 'https://brightsmiledental.com.au/',
+  },
+]
+
+const SCAN_MODES = [
+  {
+    id: 'quick',
+    label: 'Quick Audit',
+    description:
+      'Run a detailed Lighthouse review of one page across mobile and desktop.',
+  },
+  {
+    id: 'full-site',
+    label: 'Full Site Audit',
+    description:
+      'Discover important pages across the website and identify representative pages for deeper review.',
+  },
+]
+
+function isLikelyValidUrl(value) {
+  const normalisedUrl = normaliseAuditUrl(value)
+
+  if (!normalisedUrl) return false
+
+  try {
+    const parsedUrl = new URL(normalisedUrl)
+
+    return (
+      ['http:', 'https:'].includes(parsedUrl.protocol) &&
+      parsedUrl.hostname.includes('.')
+    )
+  } catch {
+    return false
+  }
+}
+
+export default function AuditForm({
+  onSubmit,
+  isLoading,
+  initialUrl = '',
+  scanMode = 'quick',
+  onScanModeChange,
+}) {
+  const [inputValue, setInputValue] = useState(initialUrl || '')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const cleanInitialUrl = initialUrl
+      ? normaliseAuditUrl(initialUrl)
+      : ''
+
+    setInputValue(cleanInitialUrl || initialUrl || '')
+    setError('')
+  }, [initialUrl])
+
+  const canSubmit = useMemo(() => {
+    return (
+      inputValue.trim().length > 0 &&
+      isLikelyValidUrl(inputValue)
+    )
+  }, [inputValue])
+
+  const handleSubmit = (event) => {
+    event.preventDefault()
+
+    const finalUrl = normaliseAuditUrl(inputValue)
+
+    if (!finalUrl) {
+      setError(
+        'Please enter a valid website URL like business.com.au'
+      )
+      return
+    }
+
+    if (!isLikelyValidUrl(finalUrl)) {
+      setError(
+        'Please enter a valid website URL like business.com.au'
+      )
+      return
+    }
+
+    setError('')
+    setInputValue(finalUrl)
+    onSubmit(finalUrl, scanMode)
+  }
+
+  const handleBlur = () => {
+    if (!inputValue.trim()) {
+      setError('')
+      return
+    }
+
+    const finalUrl = normaliseAuditUrl(inputValue)
+
+    if (!finalUrl || !isLikelyValidUrl(finalUrl)) {
+      setError(
+        'Please enter a valid website URL like business.com.au'
+      )
+      return
+    }
+
+    setInputValue(finalUrl)
+    setError('')
+  }
+
+  const handleExampleClick = (url) => {
+    const cleanUrl = normaliseAuditUrl(url)
+
+    setInputValue(cleanUrl || url)
+    setError('')
+  }
+
+  const handleClear = () => {
+    setInputValue('')
+    setError('')
+  }
+
+  const isQuickScan = scanMode === 'quick'
+
+  return (
+    <form onSubmit={handleSubmit} className="w-full">
+      <div className="mb-4">
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Scan mode
+        </p>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          {SCAN_MODES.map((mode) => {
+            const selected = scanMode === mode.id
+
+            return (
+              <button
+                key={mode.id}
+                type="button"
+                disabled={isLoading}
+                onClick={() => onScanModeChange?.(mode.id)}
+                className={`rounded-2xl border p-4 text-left transition disabled:opacity-50 ${
+                  selected
+                    ? 'border-success-border bg-success-muted/40 ring-1 ring-success-border/40'
+                    : 'border-border bg-secondary/30 hover:border-white/[0.16] hover:bg-secondary/40'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      selected
+                        ? 'border-success bg-success/20'
+                        : 'border-white/20'
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {selected ? (
+                      <span className="h-2 w-2 rounded-full bg-success" />
+                    ) : null}
+                  </span>
+
+                  <span className="text-sm font-semibold text-foreground">
+                    {mode.label}
+                  </span>
+                </div>
+
+                <p className="mt-2 pl-6 text-xs leading-relaxed text-muted-foreground">
+                  {mode.description}
+                </p>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <label
+          htmlFor="audit-url"
+          className="block text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+        >
+          Website URL
+        </label>
+
+        {inputValue && !isLoading && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="text-xs font-medium text-muted-foreground transition hover:text-secondary-foreground"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-3 lg:flex-row">
+        <div className="relative flex-1">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground"
+          >
+            🌐
+          </span>
+
+          <input
+            id="audit-url"
+            type="text"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck="false"
+            autoFocus={!initialUrl}
+            value={inputValue}
+            onChange={(event) => {
+              setInputValue(event.target.value)
+
+              if (error) {
+                setError('')
+              }
+            }}
+            onBlur={handleBlur}
+            placeholder="Enter a website URL, e.g. business.com.au"
+            disabled={isLoading}
+            aria-invalid={Boolean(error)}
+            aria-describedby={
+              error ? 'audit-url-error' : 'audit-url-help'
+            }
+            className={`w-full rounded-2xl border bg-input py-3.5 pl-12 pr-4 text-sm text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground focus:ring-4 disabled:cursor-not-allowed disabled:opacity-50 sm:text-base ${
+              error
+                ? 'border-rose-400/40 focus:border-rose-400 focus:ring-rose-500/10'
+                : 'border-border focus:border-blue-400 focus:ring-blue-500/10'
+            }`}
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={isLoading || !canSubmit}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3.5 text-sm font-semibold text-white shadow-[0_10px_28px_rgba(37,99,235,0.24)] transition hover:-translate-y-0.5 hover:bg-blue-500 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 lg:w-auto"
+        >
+          {isLoading ? (
+            <>
+              <svg
+                aria-hidden="true"
+                className="h-4 w-4 animate-spin"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v8z"
+                />
+              </svg>
+
+              {isQuickScan
+                ? 'Running quick audit…'
+                : 'Discovering site pages…'}
+            </>
+          ) : (
+            <>
+              <span aria-hidden="true">
+                {isQuickScan ? '⚡' : '📊'}
+              </span>
+
+              {isQuickScan
+                ? 'Run Quick Audit'
+                : 'Run Full Site Audit'}
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="mt-2 flex flex-col gap-1">
+        {error ? (
+          <p
+            id="audit-url-error"
+            className="text-xs text-rose-300"
+          >
+            {error}
+          </p>
+        ) : (
+          <p
+            id="audit-url-help"
+            className="text-xs text-muted-foreground"
+          >
+            {isQuickScan
+              ? 'Audits one page using separate mobile and desktop Lighthouse tests.'
+              : 'Discovers important pages across the website and selects representative pages for deeper review.'}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground sm:flex-shrink-0">
+          Try an example
+        </p>
+
+        <div className="flex flex-wrap gap-1.5">
+          {EXAMPLE_SITES.map((site) => (
+            <button
+              key={site.label}
+              type="button"
+              onClick={() => handleExampleClick(site.url)}
+              disabled={isLoading}
+              className="rounded-full border border-border bg-secondary/50 px-3 py-1 text-xs font-medium text-secondary-foreground transition hover:border-blue-400/30 hover:bg-blue-500/10 hover:text-blue-200 disabled:opacity-40"
+            >
+              {site.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </form>
+  )
+}
