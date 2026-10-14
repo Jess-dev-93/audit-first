@@ -3115,7 +3115,7 @@ export default function FullSiteAuditReport({
           <div>
 
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-300">
-              JM Sites client report
+              JM Sites Report preview
             </p>
 
             <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">

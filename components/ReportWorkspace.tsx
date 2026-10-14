@@ -1,17 +1,18 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { UserProfile } from '../lib/profileStorage'
 import { applyProfilePlaceholdersDeep } from '../lib/templateUtils'
+
 
 type Device = 'mobile' | 'desktop'
 type Tab = 'overview' | 'findings' | 'technical'
 
 interface DeviceScores {
-  performance: number
-  seo: number
-  accessibility: number
-  bestPractices: number
+  performance: number | null
+  seo: number | null
+  accessibility: number | null
+  bestPractices: number | null
 }
 
 interface TechnicalFinding {
@@ -49,6 +50,7 @@ interface Props {
   onSave: (report: EditableReport) => void
   onNewAudit: () => void
   onEditBranding: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 const primary =
@@ -156,7 +158,7 @@ function ListEditor({
         onClick={() => onChange([...items, ''])}
         className="text-sm font-medium text-[#6135ad] hover:underline"
       >
-        + Add item
+        + Add another
       </button>
     </div>
   )
@@ -172,7 +174,8 @@ function TextList({
   if (!items.length) {
     return (
       <p className="text-sm text-[#756b80]">
-        No items supplied for this section.
+         No notes added yet. Choose Edit report to add your observations
+  and recommendations.
       </p>
     )
   }
@@ -229,23 +232,27 @@ function documentHtml({
   }
 
   const scoreRows = [
-    ['Performance', scores.performance],
-    ['SEO', scores.seo],
-    ['Accessibility', scores.accessibility],
-    ['Best practices', scores.bestPractices],
-  ]
-    .map(
-      ([label, value]) =>
-        `<tr><th>${escapeHtml(String(label))}</th><td>${value}/100</td></tr>`
-    )
-    .join('')
+  ['Performance', scores.performance],
+  ['Basic SEO checks', scores.seo],
+  ['Automated accessibility', scores.accessibility],
+  ['Technical best practices', scores.bestPractices],
+]
+  .map(
+    ([label, value]) =>
+      `<tr><th>${escapeHtml(String(label))}</th><td>${
+        typeof value === 'number'
+          ? value + '/100'
+          : 'Not measured'
+      }</td></tr>`
+  )
+  .join('')
 
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(title)} - Website health check</title>
+  <title>${escapeHtml(title)} - Website review</title>
   <style>
     * { box-sizing: border-box; }
     html { color-scheme: light; }
@@ -300,22 +307,22 @@ function documentHtml({
       <div class="brand">${escapeHtml(profile.yourCompany || 'Website review')}</div>
     </header>
 
-    <h1>Website health check</h1>
+    <h1>Website review</h1>
     <p class="client">${escapeHtml(title)}</p>
     <div class="muted url">${escapeHtml(url)}</div>
-    <div class="muted">Audited ${escapeHtml(date)} · Single-page review</div>
+    <div class="muted">Scanned ${escapeHtml(date)} · Single-page review</div>
 
     ${
       report.executiveSummary
-        ? `<section><h2>Executive summary</h2><p>${escapeHtml(
+        ? `<section><h2>Review summary</h2><p>${escapeHtml(
             report.executiveSummary
           )}</p></section>`
         : ''
     }
 
-    ${listSection('Key findings', report.keyIssues)}
-    ${listSection('Potential business impact', report.businessImpact)}
-    ${listSection('Recommended next steps', report.recommendations)}
+    ${listSection('Issues and opportunities', report.keyIssues)}
+    ${listSection('Why it matters', report.businessImpact)}
+    ${listSection('Recommended actions', report.recommendations)}
 
     <section>
       <h2>${device === 'mobile' ? 'Mobile' : 'Desktop'} scores</h2>
@@ -323,16 +330,19 @@ function documentHtml({
     </section>
 
     <footer>
-      Prepared by ${escapeHtml(profile.yourName || 'Your consultant')}<br>
-      ${escapeHtml(profile.yourCompany || '')}<br>
-      ${escapeHtml(profile.yourWebsite || '')}
-      <p>
-        Scope: one page. Automated performance, SEO and accessibility
-        checks support this review; they do not establish full website
-        compliance, conversion performance or analytics accuracy.
-        Scores reflect the conditions of the original test.
-      </p>
-    </footer>
+  Prepared by ${escapeHtml(profile.yourName || 'Your consultant')}<br>
+  ${escapeHtml(profile.yourCompany || '')}<br>
+  ${escapeHtml(profile.yourWebsite || '')}
+  <p>
+    Scope: the page shown above. Automated checks cover performance,
+    basic SEO, accessibility and technical best practices.
+    Recommendations should be checked against the website and
+    the client's goals. Automated scores do not establish
+    accessibility compliance, search rankings, conversion results
+    or analytics accuracy. Measurements reflect the original
+    test conditions.
+  </p>
+</footer>
   </main>
 </body>
 </html>`
@@ -348,6 +358,7 @@ export default function ReportWorkspace({
   onSave,
   onNewAudit,
   onEditBranding,
+  onDirtyChange,
 }: Props) {
   const [tab, setTab] = useState<Tab>('overview')
   const [device, setDevice] = useState<Device>('mobile')
@@ -364,6 +375,21 @@ export default function ReportWorkspace({
   const dirty =
     JSON.stringify(cleanReport(draft)) !==
     JSON.stringify(cleanReport(savedReport))
+
+  useEffect(() => {
+    onDirtyChange?.(dirty)
+    return () => onDirtyChange?.(false)
+  }, [dirty, onDirtyChange])
+
+  useEffect(() => {
+    if (!dirty) return
+    const protect = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', protect)
+    return () => window.removeEventListener('beforeunload', protect)
+  }, [dirty])
 
   const preview = useMemo(
     () =>
@@ -390,21 +416,16 @@ export default function ReportWorkspace({
       setMessage('Changes saved in this browser.')
     } catch {
       setMessage(
-        'Changes could not be saved. Your draft is still here; export a copy before leaving.'
-      )
+  'Your changes could not be saved in this browser. Your draft is still open. Use Save as PDF to keep a copy before leaving.'
+)
     }
   }
 
   const openDocument = (print: boolean) => {
-    if (dirty) {
-      setMessage('Save your wording changes before previewing or exporting.')
-      return
-    }
-
     const popup = window.open('', '_blank')
 
     if (!popup) {
-      setMessage('Allow pop-ups for localhost to open the report.')
+      setMessage('Allow pop-ups for this site to open the report.')
       return
     }
 
@@ -419,27 +440,19 @@ export default function ReportWorkspace({
     }
   }
 
-  const leave = () => {
-    if (
-      dirty &&
-      !window.confirm('Leave this report and discard unsaved wording changes?')
-    ) {
-      return
-    }
-
-    onNewAudit()
-  }
+  // Navigation protection lives in the parent, including sidebar exits.
+  const leave = () => onNewAudit()
 
   return (
     <section className="space-y-7">
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div>
-          <h1 className="font-serif text-3xl tracking-tight sm:text-4xl">
-            Website health check
+          <h1 className="font-sans font-semibold text-3xl tracking-tight sm:text-4xl">
+            Website review
           </h1>
 
           <p className="mt-3 break-all text-sm text-[#756b80]">
-            {websiteLabel(url)} · Audited {formatDate(auditedAt)}
+            {websiteLabel(url)} · Scanned {formatDate(auditedAt)}
           </p>
         </div>
 
@@ -451,20 +464,18 @@ export default function ReportWorkspace({
           <button
             type="button"
             onClick={() => openDocument(false)}
-            disabled={dirty}
             className={secondary}
           >
             Preview report
           </button>
 
-          <button
-            type="button"
-            onClick={() => openDocument(true)}
-            disabled={dirty}
-            className={primary}
-          >
-            Export PDF
-          </button>
+        <button
+  type="button"
+  onClick={() => openDocument(true)}
+  className={primary}
+>
+  Save as PDF
+</button>
         </div>
       </div>
 
@@ -474,8 +485,8 @@ export default function ReportWorkspace({
         </p>
       )}
 
-      <div className="sitebrief-score-strip flex flex-wrap items-center gap-6 rounded-xl border border-[#e5dfe9] bg-white p-5">
-        <span className="text-sm font-medium">Single-page audit</span>
+      <div className="AuditUnfold-score-strip flex flex-wrap items-center gap-6 rounded-xl border border-[#e5dfe9] bg-white p-5">
+        <span className="text-sm font-medium">Single-page review</span>
 
         <div className="inline-flex rounded-lg bg-[#f4f0f7] p-1">
           {(['mobile', 'desktop'] as const).map((mode) => (
@@ -497,31 +508,36 @@ export default function ReportWorkspace({
 
         <div className="grid flex-1 grid-cols-2 gap-5 sm:grid-cols-4">
           {[
-            ['Performance', activeScores.performance],
-            ['SEO', activeScores.seo],
-            ['Accessibility', activeScores.accessibility],
-            ['Best practices', activeScores.bestPractices],
+             ['Performance', activeScores.performance],
+  ['Basic SEO checks', activeScores.seo],
+  ['Automated accessibility', activeScores.accessibility],
+  ['Technical best practices', activeScores.bestPractices],
           ].map(([label, value]) => (
             <div key={String(label)}>
               <p className="text-xs text-[#756b80]">{label}</p>
-              <p className="mt-1 font-serif text-2xl">
-                {value}
+              <p className="mt-1 font-sans font-semibold text-2xl">
+                {typeof value === 'number' ? value : '—'}
                 <span className="ml-1 font-sans text-xs text-[#756b80]">
-                  /100
+                  {typeof value === 'number' ? '/100' : 'Not measured'}
                 </span>
               </p>
             </div>
           ))}
         </div>
       </div>
-
+<p className="text-xs leading-5 text-[#756b80]">
+  These scores cover automated checks on this page.
+  They do not measure the whole website or replace a manual review.
+  Switching devices changes the test results and PDF score table;
+  your written report stays the same.
+</p>
       <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.8fr)]">
         <div className="min-w-0">
           <div className="flex gap-5 border-b border-[#e5dfe9]">
             {[
               ['overview', 'Overview'],
               ['findings', 'Findings'],
-              ['technical', 'Technical details'],
+              ['technical', 'Test results'],
             ].map(([value, label]) => (
               <button
                 key={value}
@@ -541,7 +557,7 @@ export default function ReportWorkspace({
 
           <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-[#756b80]">
-              {dirty ? 'Unsaved wording changes' : 'Review the wording before sending'}
+              {dirty ? 'Unsaved report changes' : 'Check the findings and add your recommendations before sharing'}
             </p>
 
             {editing ? (
@@ -571,7 +587,7 @@ export default function ReportWorkspace({
                 }}
                 className="text-sm font-medium text-[#6135ad] hover:underline"
               >
-                ✎ Edit wording
+                ✎ Edit report
               </button>
             )}
           </div>
@@ -580,7 +596,7 @@ export default function ReportWorkspace({
             <div className="mt-6 space-y-7 rounded-xl border border-[#e5dfe9] bg-white p-5">
               <label className="block">
                 <span className="mb-3 block font-medium">
-                  Executive summary
+                  Review summary
                 </span>
                 <textarea
                   rows={6}
@@ -593,13 +609,13 @@ export default function ReportWorkspace({
               </label>
 
               <ListEditor
-                label="Key findings"
+                label="Issues and opportunities"
                 items={draft.keyIssues}
                 onChange={(keyIssues) => setDraft({ ...draft, keyIssues })}
               />
 
               <ListEditor
-                label="Potential business impact"
+                label="Why it matters"
                 items={draft.businessImpact}
                 onChange={(businessImpact) =>
                   setDraft({ ...draft, businessImpact })
@@ -607,7 +623,7 @@ export default function ReportWorkspace({
               />
 
               <ListEditor
-                label="Recommended next steps"
+                label="Recommended actions"
                 items={draft.recommendations}
                 onChange={(recommendations) =>
                   setDraft({ ...draft, recommendations })
@@ -619,14 +635,15 @@ export default function ReportWorkspace({
           {!editing && tab === 'overview' && (
             <div className="mt-8 space-y-8">
               <section>
-                <h2 className="font-serif text-2xl">Executive summary</h2>
+                <h2 className="font-sans font-semibold text-2xl">Review summary</h2>
                 <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-[#493955]">
-                  {draft.executiveSummary || 'No summary supplied for this audit.'}
+                 {draft.executiveSummary ||
+  'No summary added yet. Choose Edit report to explain what you found and what you recommend.'}
                 </p>
               </section>
 
               <section>
-                <h2 className="font-serif text-2xl">What matters most</h2>
+                <h2 className="font-sans font-semibold text-2xl">Top findings</h2>
                 <TextList items={draft.keyIssues.slice(0, 3)} numbered />
 
                 {draft.keyIssues.length > 3 && (
@@ -641,8 +658,8 @@ export default function ReportWorkspace({
               </section>
 
               <section>
-                <h2 className="font-serif text-2xl">
-                  Recommended next steps
+                <h2 className="font-sans font-semibold text-2xl">
+                  Recommended actions
                 </h2>
                 <TextList items={draft.recommendations} />
               </section>
@@ -652,13 +669,13 @@ export default function ReportWorkspace({
           {!editing && tab === 'findings' && (
             <div className="mt-8 space-y-8">
               <section>
-                <h2 className="font-serif text-2xl">Key findings</h2>
+                <h2 className="font-sans font-semibold text-2xl">Issues and opportunities</h2>
                 <TextList items={draft.keyIssues} numbered />
               </section>
 
               <section>
-                <h2 className="font-serif text-2xl">
-                  Potential business impact
+                <h2 className="font-sans font-semibold text-2xl">
+                  Why it matters
                 </h2>
                 <TextList items={draft.businessImpact} />
               </section>
@@ -668,11 +685,12 @@ export default function ReportWorkspace({
           {!editing && tab === 'technical' && (
             <div className="mt-8 space-y-6">
               <div>
-                <h2 className="font-serif text-2xl">Technical evidence</h2>
+                <h2 className="font-sans font-semibold text-2xl">Automated test results</h2>
                 <p className="mt-3 text-sm leading-6 text-[#756b80]">
-                  Original {device} test findings. Editing your commentary
-                  does not change these measurements.
-                </p>
+  Results from the original {device} scan. Use these to support
+  your review and check any issues before recommending fixes.
+  Editing the report does not change the test results.
+</p>
               </div>
 
               {findings.length ? (
@@ -693,13 +711,14 @@ export default function ReportWorkspace({
                 </div>
               ) : (
                 <p className="text-sm text-[#756b80]">
-                  Detailed findings are not available in this saved record.
-                </p>
+  This saved report does not include detailed {device} findings.
+  This does not mean the page passed every check.
+</p>
               )}
 
               <details className="rounded-lg border border-[#e5dfe9] bg-white p-4">
                 <summary className="cursor-pointer text-sm font-medium">
-                  Original measurement details
+                  Raw test data
                 </summary>
                 <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs text-[#756b80]">
                   {JSON.stringify(scores.details, null, 2)}
@@ -709,9 +728,9 @@ export default function ReportWorkspace({
           )}
         </div>
 
-        <aside className="sitebrief-preview min-w-0 rounded-xl border border-[#e5dfe9] bg-[#f4f1f6] p-4 xl:sticky xl:top-6">
+        <aside className="AuditUnfold-preview min-w-0 rounded-xl border border-[#e5dfe9] bg-[#f4f1f6] p-4 xl:sticky xl:top-6">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="font-serif text-xl">Client report</h2>
+            <h2 className="font-sans font-semibold text-xl">Report preview</h2>
             {dirty && (
               <span className="text-xs text-[#756b80]">Draft preview</span>
             )}
@@ -735,14 +754,15 @@ export default function ReportWorkspace({
               onClick={onEditBranding}
               className={secondary}
             >
-              Edit branding
+              Report branding
             </button>
           </div>
 
           <p className="mt-4 text-xs leading-5 text-[#756b80]">
-            The preview includes your current wording.
-            Export uses your saved version and selected device scores.
-          </p>
+  The preview and PDF include your current edits and the selected
+  device scores. Save changes to keep your edits in this browser.
+  To download a PDF, choose Save as PDF in the print dialog.
+</p>
         </aside>
       </div>
     </section>

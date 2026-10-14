@@ -157,10 +157,10 @@ function exportEntryToPDF(entry) {
   ]
 
   const sections = [
-    { title: 'Executive Summary', content: report.executiveSummary, emoji: '📋' },
+    { title: 'Review summary', content: report.executiveSummary, emoji: '📋' },
     { title: 'Key Issues', content: report.keyIssues, emoji: '⚠️' },
     { title: 'Business Impact', content: report.businessImpact, emoji: '💼' },
-    { title: 'Recommended Next Steps', content: report.recommendations, emoji: '🚀' },
+    { title: 'Recommended actions', content: report.recommendations, emoji: '🚀' },
   ].filter((s) => s.content)
 
   const scoresHtml = scoreItems
@@ -308,10 +308,10 @@ function exportAllToPDF(history) {
       ]
 
       const sections = [
-        { title: 'Executive Summary', content: report.executiveSummary, emoji: '📋' },
+        { title: 'Review summary', content: report.executiveSummary, emoji: '📋' },
         { title: 'Key Issues', content: report.keyIssues, emoji: '⚠️' },
         { title: 'Business Impact', content: report.businessImpact, emoji: '💼' },
-        { title: 'Recommended Next Steps', content: report.recommendations, emoji: '🚀' },
+        { title: 'Recommended actions', content: report.recommendations, emoji: '🚀' },
       ].filter((s) => s.content)
 
       const scoresHtml = scoreItems
@@ -868,7 +868,7 @@ function exportEntryToExcel(entry) {
   }
 
   if (report.executiveSummary) {
-    rows.push([esc('EXECUTIVE SUMMARY'), '', '', ''])
+    rows.push([esc('Review summary'), '', '', ''])
     rows.push([esc(report.executiveSummary), '', '', ''])
     rows.push(['', '', '', ''])
   }
@@ -886,7 +886,7 @@ function exportEntryToExcel(entry) {
   }
 
   if (Array.isArray(report.recommendations)) {
-    rows.push([esc('RECOMMENDED NEXT STEPS'), '', '', ''])
+    rows.push([esc('Recommended actions'), '', '', ''])
     report.recommendations.forEach((item, i) => rows.push([esc(`${i + 1}. ${item}`), '', '', '']))
     rows.push(['', '', '', ''])
   }

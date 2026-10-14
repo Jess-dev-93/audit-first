@@ -2094,7 +2094,7 @@ export async function POST(
       `Starting ${
         isQuickScan
           ? 'quick audit'
-          : 'full single-page audit'
+          : 'full Single-page review'
       } for: ${cleanUrl}`
     )
 

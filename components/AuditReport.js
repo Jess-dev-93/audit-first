@@ -10,7 +10,7 @@ import { getScoreStyles } from '../lib/scoreColors'
 import { getDisplayAuditUrl } from '../lib/normaliseAuditUrl'
 
 const SECTION_CONFIG = {
-  'Executive Summary': {
+  'Review summary': {
     icon: '📋',
     accent: 'border-blue-500/20 bg-blue-500/[0.04]',
     iconBg: 'bg-blue-500/10 text-blue-300',
@@ -46,7 +46,7 @@ const SECTION_CONFIG = {
       'Potential user and business implications of the automated findings. These are considerations rather than confirmed outcomes.',
   },
 
-  'Recommended Next Steps': {
+  'Recommended actions': {
     icon: '🚀',
     accent:
       'border-emerald-500/20 bg-emerald-500/[0.04]',
@@ -935,7 +935,7 @@ function exportToPDF(
   const sections = [
     {
       title:
-        'Executive Summary',
+        'Review summary',
       content:
         hydratedReport.executiveSummary,
       emoji: '📋',
@@ -956,7 +956,7 @@ function exportToPDF(
     },
     {
       title:
-        'Recommended Next Steps',
+        'Recommended actions',
       content:
         hydratedReport.recommendations,
       emoji: '🚀',
@@ -2327,7 +2327,7 @@ function exportToExcel(
   const reportSections = [
     {
       heading:
-        'EXECUTIVE SUMMARY',
+        'Review summary',
 
       content:
         hydratedReport.executiveSummary,
@@ -2348,7 +2348,7 @@ function exportToExcel(
     },
     {
       heading:
-        'RECOMMENDED NEXT STEPS',
+        'Recommended actions',
 
       content:
         hydratedReport.recommendations,
@@ -2557,7 +2557,7 @@ export default function AuditReport({
   const sections = [
     {
       title:
-        'Executive Summary',
+        'Review summary',
 
       content:
         hydratedReport.executiveSummary,
@@ -2578,7 +2578,7 @@ export default function AuditReport({
     },
     {
       title:
-        'Recommended Next Steps',
+        'Recommended actions',
 
       content:
         hydratedReport.recommendations,

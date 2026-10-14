@@ -23,18 +23,19 @@ import type { TechStack } from '../../../lib/techStack'
 import ReportWorkspace from '../../../components/ReportWorkspace'
 import FullSiteAuditReport from '../../../components/FullSiteAuditReport'
 import type { FullSiteAuditResult } from '../../../components/FullSiteAuditReport'
-import ProfileModal from '../../../components/profile/ProfileModal'
+import AuditBrandDialog from '../../../components/AuditBrandDialog'
+import PrismScanner from '../../../components/PrismScanner'
+import { ArrowRight, FileText, Palette, Plus, Search, Monitor, Globe, Layers, Clock3, Trash2, PanelLeftClose, PanelLeftOpen, ChevronRight } from 'lucide-react'
 import './sitebrief.css'
 
 type View = 'new' | 'reports' | 'report'
 type ScanMode = 'quick' | 'full-site'
-type Device = 'mobile' | 'desktop'
 
 interface DeviceScores {
-  performance: number
-  seo: number
-  accessibility: number
-  bestPractices: number
+  performance: number | null
+  seo: number | null
+  accessibility: number | null
+  bestPractices: number | null
 }
 
 interface AuditScores {
@@ -68,6 +69,7 @@ interface SavedAudit {
   bestPractices?: number
   status?: string
   notes?: string
+  fullSiteResult?: FullSiteAuditResult
 }
 
 interface LegacyAudit extends SavedAudit {
@@ -97,12 +99,6 @@ const theme = {
   '--ring': '#6135ad',
   colorScheme: 'light',
 } as CSSProperties
-
-const primaryButton =
-  'inline-flex items-center justify-center gap-2 rounded-lg bg-[#6135ad] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#50258f] disabled:cursor-not-allowed disabled:opacity-50'
-
-const secondaryButton =
-  'inline-flex items-center justify-center rounded-lg border border-[#ded6e5] bg-white px-4 py-2 text-sm font-medium text-[#6135ad] transition hover:bg-[#f1ebf8]'
 
 function normaliseUrl(value: string) {
   const trimmed = value.trim()
@@ -180,113 +176,92 @@ function scoresFor(entry: SavedAudit): AuditScores {
   return {
     mobile: {
       performance:
-        entry.mobilePerformance ?? entry.performance ?? 0,
-      seo: entry.seo ?? 0,
-      accessibility: entry.accessibility ?? 0,
-      bestPractices: entry.bestPractices ?? 0,
+        entry.mobilePerformance ?? entry.performance ?? null,
+      seo: entry.seo ?? null,
+      accessibility: entry.accessibility ?? null,
+      bestPractices: entry.bestPractices ?? null,
     },
     desktop: {
-      performance: entry.desktopPerformance ?? 0,
-      seo: 0,
-      accessibility: 0,
-      bestPractices: 0,
+      performance: entry.desktopPerformance ?? null,
+      seo: null,
+      accessibility: null,
+      bestPractices: null,
     },
     overallScore: entry.overallScore ?? 0,
     details: {},
   }
 }
 
-function DocumentIcon({ className = 'h-5 w-5' }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z" />
-      <path d="M14 3v6h6M8 13h8M8 17h5" />
-    </svg>
-  )
-}
-
 function ReportsTable({
   entries,
   onOpen,
+  onDelete,
 }: {
   entries: SavedAudit[]
   onOpen: (entry: SavedAudit) => void
+  onDelete: (entry: SavedAudit) => void
 }) {
-  if (entries.length === 0) {
+  if (!entries.length) {
     return (
-      <div className="rounded-xl border border-dashed border-[#ded6e5] px-6 py-10 text-center">
-        <p className="font-medium text-[#271436]">
-          Your reports will appear here
-        </p>
-        <p className="mt-2 text-sm text-[#756b80]">
-          Run a single-page audit to save your first report.
-        </p>
+      <div className="prism-empty">
+        <span className="prism-icon-tile">
+          <FileText size={22} />
+        </span>
+
+        <div>
+          <p>Create your first report</p>
+          <span>
+            Scan a website to get started. Your report will be saved in this browser.
+          </span>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[580px] text-left text-sm">
-        <thead>
-          <tr className="border-b border-[#e5dfe9] text-xs uppercase tracking-wider text-[#756b80]">
-            <th className="pb-4 pr-6 font-medium">Website</th>
-            <th className="pb-4 pr-6 font-medium">URL</th>
-            <th className="pb-4 pr-6 font-medium">Audited</th>
-            <th className="pb-4 text-right font-medium">
-              <span className="sr-only">Actions</span>
-            </th>
-          </tr>
-        </thead>
+    <div className="prism-report-list">
+      {entries.map((entry) => (
+        <div className="prism-report-row" key={entry.id}>
+          <span className="prism-icon-tile">
+            <FileText size={21} />
+          </span>
 
-        <tbody>
-          {entries.map((entry) => (
-            <tr
-              key={entry.id}
-              className="border-b border-[#e5dfe9] last:border-0"
+          <span className="prism-report-name">
+            <strong title={reportTitle(entry)}>
+              {reportTitle(entry).split(/\s[|–—]\s/)[0]}
+            </strong>
+            <span>{displayUrl(entry.url)}</span>
+          </span>
+
+          <span className="prism-report-date">
+            {displayDate(entry.savedAt)}
+          </span>
+
+          <span className="prism-scope-badge">
+            {entry.fullSiteResult ? 'Website review' : 'Single page'}
+          </span>
+
+          <div className="prism-report-actions">
+            <button
+              type="button"
+              className="prism-report-open"
+              onClick={() => onOpen(entry)}
             >
-              <td className="max-w-[240px] py-5 pr-6">
-                <p
-                  className="truncate font-medium text-[#271436]"
-                  title={reportTitle(entry)}
-                >
-                  {reportTitle(entry)}
-                </p>
-              </td>
+              Open report <ArrowRight size={18} />
+            </button>
 
-              <td className="max-w-[240px] py-5 pr-6">
-                <p
-                  className="truncate text-[#756b80]"
-                  title={entry.url}
-                >
-                  {displayUrl(entry.url)}
-                </p>
-              </td>
-
-              <td className="whitespace-nowrap py-5 pr-6 text-[#756b80]">
-                {displayDate(entry.savedAt)}
-              </td>
-
-              <td className="py-5 text-right">
-                <button
-                  type="button"
-                  onClick={() => onOpen(entry)}
-                  className="whitespace-nowrap font-medium text-[#6135ad] hover:underline"
-                >
-                  Open report <span aria-hidden="true">→</span>
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            <button
+              type="button"
+              className="prism-delete-report"
+              onClick={() => onDelete(entry)}
+              aria-label={`Delete report for ${displayUrl(entry.url)}`}
+              title="Delete report"
+            >
+              <Trash2 size={22} />
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -295,19 +270,20 @@ export default function AuditPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#faf9f7] p-10 text-[#756b80]">
-          Loading SiteBrief…
+        <div className="prism-loading">
+          Loading your workspace…
         </div>
       }
     >
-      <SiteBriefWorkspace />
+      <AuditUnfoldWorkspace />
     </Suspense>
   )
 }
 
-function SiteBriefWorkspace() {
+function AuditUnfoldWorkspace() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const {
     userId,
@@ -318,7 +294,6 @@ function SiteBriefWorkspace() {
   const [view, setView] = useState<View>('new')
   const [url, setUrl] = useState('')
   const [scanMode, setScanMode] = useState<ScanMode>('quick')
-  const [device, setDevice] = useState<Device>('mobile')
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -332,7 +307,20 @@ function SiteBriefWorkspace() {
   const [brandingOpen, setBrandingOpen] = useState(false)
 
   const runningRef = useRef(false)
+  const dirtyRef = useRef(false)
+  const [elapsed, setElapsed] = useState(0)
   const queryUrl = searchParams.get('url') || ''
+
+  useEffect(() => {
+    if (!isRunning) return
+    const started = Date.now()
+    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
+    return () => window.clearInterval(timer)
+  }, [isRunning])
+
+  const canLeave = () => !dirtyRef.current || window.confirm('Leave this report without saving your changes?')
+  const handleDirtyChange = useCallback((dirty: boolean) => { dirtyRef.current = dirty }, [])
+
 
   useEffect(() => {
     if (authLoading) return
@@ -365,16 +353,16 @@ function SiteBriefWorkspace() {
   }, [])
 
   const openReport = (entry: SavedAudit) => {
-    setAudit(entry)
-    setFullSite(null)
-    setDevice('mobile')
+    if (!canLeave()) return
+    setAudit(entry.fullSiteResult ? null : entry)
+    setFullSite(entry.fullSiteResult || null)
     setError(null)
     setView('report')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }
 
   const startNew = () => {
-    if (runningRef.current) return
+    if (runningRef.current || !canLeave()) return
 
     setAudit(null)
     setFullSite(null)
@@ -385,7 +373,7 @@ function SiteBriefWorkspace() {
   }
 
   const showReports = () => {
-    if (runningRef.current) return
+    if (runningRef.current || !canLeave()) return
 
     refreshHistory()
     setError(null)
@@ -412,6 +400,7 @@ function SiteBriefWorkspace() {
 
     runningRef.current = true
     setIsRunning(true)
+    setElapsed(0)
     setError(null)
     setAudit(null)
     setFullSite(null)
@@ -440,15 +429,31 @@ function SiteBriefWorkspace() {
       const json = await response.json()
 
       if (!response.ok || !json.success) {
-        setError(json.error || 'The audit failed. Please try again.')
+        setError(json.error || 'The scan could not finish. Please try again.')
         return
       }
 
       if (scanMode === 'full-site') {
         setFullSite(json)
         setView('report')
+        try {
+          const entry: SavedAudit = {
+            id: crypto.randomUUID(),
+            url: target,
+            savedAt: new Date().toISOString(),
+            pageTitle: displayUrl(target),
+            fullSiteResult: json,
+          }
+          const updated = [entry, ...readHistory()].slice(0, 50)
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
+          setHistory(updated)
+        } catch {
+          setError('Your report is ready, but could not be saved in this browser. Export a copy before leaving.')
+        }
         return
       }
+
+      if (!json.scores?.mobile || !json.scores?.desktop) throw new Error('Incomplete audit response')
 
       const entry: SavedAudit = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -470,22 +475,11 @@ function SiteBriefWorkspace() {
       }
 
       setAudit(entry)
-      setDevice('mobile')
       setView('report')
 
       try {
-        const existing = readHistory()
-        const today = new Date().toDateString()
-
-        const remaining = existing.filter(
-          (item) =>
-            !(
-              item.url === entry.url &&
-              new Date(item.savedAt).toDateString() === today
-            )
-        )
-
-        const updated = [entry, ...remaining].slice(0, 50)
+        // Keep every scan as its own version so edited reports are not replaced.
+        const updated = [entry, ...readHistory()].slice(0, 50)
 
         localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
         setHistory(updated)
@@ -496,13 +490,37 @@ function SiteBriefWorkspace() {
       }
     } catch {
       setError(
-        'Could not complete the audit. Check your connection and try again.'
+        'The scan could not finish. Check your connection and try again. If it keeps failing, try a single-page scan.'
       )
     } finally {
       runningRef.current = false
       setIsRunning(false)
     }
   }
+
+  const deleteReport = (entry: SavedAudit) => {
+  const confirmed = window.confirm(
+    `Delete the saved report for ${displayUrl(entry.url)}? This cannot be undone.`
+  )
+
+  if (!confirmed) return
+
+  try {
+    const updated = readHistory().filter(
+      (item) => item.id !== entry.id
+    )
+
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
+    setHistory(updated)
+    setError(null)
+
+    if (audit?.id === entry.id) {
+      setAudit(null)
+    }
+  } catch {
+    setError('The report could not be deleted. Please try again.')
+  }
+}
 
   const filteredHistory = history.filter((entry) =>
     `${entry.pageTitle || ''} ${entry.url}`
@@ -512,367 +530,246 @@ function SiteBriefWorkspace() {
 
   if (authLoading || (AUTH_REQUIRED && !userId)) {
     return (
-      <div className="min-h-screen bg-[#faf9f7] p-10 text-[#756b80]">
-        Loading SiteBrief…
+      <div className="prism-loading">
+        Loading your workspace…
       </div>
     )
   }
 
   return (
-    <div
-  style={theme}
-  className="sitebrief-workspace min-h-screen bg-[#faf9f7] text-[#271436] md:flex"
+   <div
+  className={
+    'prism-app' + (sidebarOpen ? '' : ' is-nav-collapsed')
+  }
 >
-      <aside className="flex flex-col border-b border-[#e5dfe9] bg-[#fcfbfa] p-5 md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-b-0 md:border-r md:p-6">
-        <div className="flex items-center gap-3">
-          <DocumentIcon className="h-8 w-8 text-[#6135ad]" />
-
-          <div>
-            <p className="font-serif text-3xl tracking-tight">
-              SiteBrief
-            </p>
-            <p className="mt-1 text-xs text-[#756b80]">
-              by JM Sites
-            </p>
-          </div>
+      <a href="#audit-content" className="prism-skip-link">Skip to workspace</a>
+      
+      <aside id="workspace-sidebar" className="prism-sidebar">
+      
+        <div className="prism-brand">
+          <svg viewBox="0 0 56 56" fill="none" aria-hidden="true"><path d="M28 5 5 47l46 4L28 5Zm0 0v30M5 47l23-12 23 16" stroke="currentColor" strokeWidth="1.8"/><path d="m5 47 23-12 23 16" stroke="#71deef" strokeWidth="2"/></svg>
+          <div><strong>AuditUnfold</strong><span>by JM Sites</span></div>
+       
         </div>
-
-        <button
-          type="button"
-          onClick={startNew}
-          disabled={isRunning}
-          className={`${primaryButton} mt-7 w-full`}
-        >
-          <span className="text-xl" aria-hidden="true">+</span>
-          New audit
-        </button>
-
-        <nav
-          aria-label="Workspace"
-          className="mt-4 flex gap-2 md:flex-col"
-        >
-          <button
-            type="button"
-            onClick={showReports}
-            disabled={isRunning}
-            className={`flex flex-1 items-center gap-3 rounded-lg px-4 py-3 text-left text-sm transition disabled:opacity-50 ${
-              view === 'reports' || view === 'report'
-                ? 'bg-[#eee7f8] text-[#6135ad]'
-                : 'text-[#493955] hover:bg-[#f1edf5]'
-            }`}
-          >
-            <DocumentIcon />
-            Reports
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setBrandingOpen(true)}
-            className="flex flex-1 items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-[#493955] transition hover:bg-[#f1edf5]"
-          >
-            <span className="text-lg" aria-hidden="true">✎</span>
-            Branding
-          </button>
+        
+        <nav className="prism-nav" aria-label="Workspace">
+          <button type="button" onClick={startNew} disabled={isRunning} className={view === 'new' ? 'is-active' : ''} aria-current={view === 'new' ? 'page' : undefined}><Plus size={21} /><span>New audit</span></button>
+          <button type="button" onClick={showReports} disabled={isRunning} className={view !== 'new' ? 'is-active' : ''} aria-current={view !== 'new' ? 'page' : undefined}><FileText size={21} /><span>Your reports</span></button>
+          <button type="button" onClick={() => setBrandingOpen(true)}><Palette size={21} /><span>Export / Branding</span></button>
+        
         </nav>
+       
+        <div className="prism-sidebar-bottom">
+  <div className="prism-sidebar-tools">
+    <button
+      type="button"
+      className="prism-nav-toggle"
+      onClick={() => setSidebarOpen((open) => !open)}
+      aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+      aria-expanded={sidebarOpen}
+      title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+    >
+      {sidebarOpen ? (
+        <PanelLeftClose size={24} />
+      ) : (
+        <PanelLeftOpen size={24} />
+      )}
+    </button>
+  </div>
 
-        <div className="mt-auto hidden pt-10 md:block">
-          <p className="text-sm font-medium">Your workspace</p>
-          <p className="mt-1 truncate text-xs text-[#756b80]">
-            {email || 'Reports saved in this browser'}
-          </p>
-        </div>
+  
+</div>
       </aside>
+      <main id="audit-content" className="prism-main">
+       
 
-      <main className="min-w-0 flex-1">
-        <header className="border-b border-[#e5dfe9] px-6 py-5 text-sm text-[#756b80] sm:px-10">
-          {view === 'new' && 'New audit'}
-          {view === 'reports' && 'Saved reports'}
-          {view === 'report' && (
-            <button
-              type="button"
-              onClick={showReports}
-              className="hover:text-[#6135ad]"
-            >
-              Reports <span className="mx-2">/</span> Website review
-            </button>
-          )}
-        </header>
+        <div className="prism-content">
+          {error && <div role="alert" className="prism-error">{error}</div>}
+          {view === 'new' && <>
+            <section className="prism-hero" aria-labelledby="start-heading">
+  <div className="prism-hero-copy">
+    <span className="prism-eyebrow">
+      <Layers size={14} />
+      Website audits and Report previews
+    </span>
 
-        <div className="mx-auto max-w-6xl px-6 py-10 sm:px-10 sm:py-14">
-          {error && (
-            <div
-              role="alert"
-              className="mb-6 rounded-lg border border-[#efc7c7] bg-[#fff3f1] p-4 text-sm text-[#8b3030]"
-            >
-              {error}
-            </div>
-          )}
+    <h1 id="start-heading">
+      Check the website
+      <br />
+      <span>Create your report</span>
+    </h1>
 
-          {view === 'new' && (
-            <>
-              <div className="mb-9">
-                <h1 className="font-serif text-4xl tracking-tight sm:text-5xl lg:text-6xl">
-                  Start with a website
-                </h1>
+    <p>
+      Check performance, accessibility and basic SEO.
+      <br className="prism-desktop-break" />
+      Add your observations and recommendations, then create
+      a report for your client.
+    </p>
+  </div>
 
-                <p className="mt-4 text-base leading-relaxed text-[#756b80] sm:text-lg">
-                  Turn website findings into a clear, client-ready report.
-                </p>
-              </div>
-
-             <form
-  onSubmit={runAudit}
-  className="sitebrief-scan-panel rounded-xl border border-[#ded6e5] bg-white p-6 sm:p-8"
->
-                <label
-                  htmlFor="website-url"
-                  className="block text-sm font-medium"
-                >
-                  Website URL
-                </label>
-
-                <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-                  <input
-                    id="website-url"
-                    type="text"
-                    inputMode="url"
-                    autoComplete="url"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    value={url}
-                    onChange={(event) => setUrl(event.target.value)}
-                    disabled={isRunning}
-                    required
-                    placeholder="https://example.com.au"
-                    className="min-w-0 flex-1 rounded-lg border border-[#ded6e5] bg-white px-4 py-3.5 text-base text-[#271436] outline-none placeholder:text-[#aaa1b2] focus:border-[#6135ad] focus:ring-2 focus:ring-[#eee7f8]"
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={isRunning || !url.trim()}
-                    className={primaryButton}
-                  >
-                    <DocumentIcon />
-                    {isRunning ? 'Running audit…' : 'Run audit'}
-                  </button>
-                </div>
-
-                <fieldset
-                  disabled={isRunning}
-                  className="mt-6 grid gap-5 sm:grid-cols-2"
-                >
-                  <legend className="sr-only">Audit scope</legend>
-
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="radio"
-                      name="scan-mode"
-                      value="quick"
-                      checked={scanMode === 'quick'}
-                      onChange={() => setScanMode('quick')}
-                      className="mt-1 h-4 w-4 accent-[#6135ad]"
-                    />
-
-                    <span>
-                      <span className="block font-medium">
-                        Single page
-                      </span>
-                      <span className="mt-1 block text-sm text-[#756b80]">
-                        Mobile and desktop checks
-                      </span>
-                    </span>
-                  </label>
-
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="radio"
-                      name="scan-mode"
-                      value="full-site"
-                      checked={scanMode === 'full-site'}
-                      onChange={() => setScanMode('full-site')}
-                      className="mt-1 h-4 w-4 accent-[#6135ad]"
-                    />
-
-                    <span>
-                      <span className="block font-medium">
-                        Full website
-                      </span>
-                      <span className="mt-1 block text-sm text-[#756b80]">
-                        Discover pages and review representative pages
-                      </span>
-                    </span>
-                  </label>
-                </fieldset>
-
-                <p className="mt-7 border-t border-[#e5dfe9] pt-5 text-sm leading-relaxed text-[#756b80]">
-                  Review the findings before exporting your report.
-                </p>
-
-                {isRunning && (
-                  <div
-                    role="status"
-                    className="mt-5 flex items-center gap-3 text-sm text-[#6135ad]"
-                  >
-                    <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-[#ded6e5] border-t-[#6135ad]" />
-                    {scanMode === 'quick'
-                      ? 'Checking mobile and desktop results…'
-                      : 'Discovering pages and preparing your site review…'}
-                  </div>
-                )}
-              </form>
-
-              <section className="mt-12">
-                <div className="mb-6 flex items-center justify-between gap-4">
-                  <h2 className="font-serif text-2xl sm:text-3xl">
-                    Recent reports
-                  </h2>
-
-                  <button
-                    type="button"
-                    onClick={showReports}
-                    disabled={isRunning}
-                    className="text-sm font-medium text-[#6135ad] hover:underline disabled:opacity-50"
-                  >
-                    View all reports →
-                  </button>
-                </div>
-
-                {isRunning ? (
-                  <p className="text-sm text-[#756b80]">
-                    Your saved reports will be available when the scan finishes.
-                  </p>
-                ) : (
-                  <ReportsTable
-                    entries={history.slice(0, 3)}
-                    onOpen={openReport}
-                  />
-                )}
-              </section>
-            </>
-          )}
-
-          {view === 'reports' && (
-            <section>
-              <div className="flex flex-wrap items-center justify-between gap-5">
-                <div>
-                  <h1 className="font-serif text-4xl sm:text-5xl">
-                    Your reports
-                  </h1>
-
-                  <p className="mt-3 text-sm text-[#756b80]">
-                    Reopen a saved audit to review or download it.
-                  </p>
-                </div>
-
+  <PrismScanner running={isRunning} />
+</section>
+            <form onSubmit={runAudit} className="prism-scan-card" aria-busy={isRunning}>
+              <div className="prism-form-heading"><label htmlFor="website-url">Website URL</label></div>
+              <div className="prism-url-row">
+                <div className="prism-url-field"><Globe size={20}/><input id="website-url" type="text" inputMode="url" autoComplete="url" autoCapitalize="none" spellCheck={false} value={url} onChange={(event) => setUrl(event.target.value)} disabled={isRunning} required placeholder="https://example.com.au" aria-describedby="audit-helper"/></div>
                 <button
-                  type="button"
-                  onClick={startNew}
-                  className={primaryButton}
-                >
-                  + New audit
-                </button>
+  type="submit"
+  disabled={isRunning || !url.trim()}
+  className="prism-button-primary"
+>
+  {isRunning ? (
+    <>
+      <span className="prism-spinner" />
+      Scanning…
+    </>
+  ) : (
+    <>
+      Scan website <ArrowRight size={19} />
+    </>
+  )}
+</button>
               </div>
+             <fieldset className="prism-scope-picker" disabled={isRunning}>
+  <legend className="prism-sr-only">
+    Choose how much of the website to check
+  </legend>
 
-              <label className="mt-8 block">
-                <span className="sr-only">Search saved reports</span>
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search by website or URL"
-                  className="w-full rounded-lg border border-[#ded6e5] bg-white px-4 py-3 text-sm outline-none focus:border-[#6135ad] focus:ring-2 focus:ring-[#eee7f8]"
-                />
-              </label>
+  <label
+    className={
+      'prism-scope-tile ' +
+      (scanMode === 'quick' ? 'is-selected' : '')
+    }
+  >
+    <input
+      type="radio"
+      name="scan-mode"
+      value="quick"
+      checked={scanMode === 'quick'}
+      onChange={() => setScanMode('quick')}
+    />
 
-              <div className="mt-7">
-                {history.length > 0 && filteredHistory.length === 0 ? (
-                  <p className="py-6 text-sm text-[#756b80]">
-                    No reports match your search.
-                  </p>
-                ) : (
-                  <ReportsTable
-                    entries={filteredHistory}
-                    onOpen={openReport}
-                  />
-                )}
-              </div>
-            </section>
-          )}
+    <span className="prism-scope-icon">
+      <Monitor size={21} />
+    </span>
 
-          {view === 'report' && audit && (
-  <ReportWorkspace
-    key={audit.id}
-    url={audit.url}
-    pageTitle={audit.pageTitle}
-    auditedAt={audit.savedAt}
-    scores={scoresFor(audit)}
-    report={normaliseReport(audit.report)}
-    profile={profile}
-    onNewAudit={startNew}
-    onEditBranding={() => setBrandingOpen(true)}
-    onSave={(report) => {
-      const updatedAudit = {
-        ...audit,
-        report,
-      }
+    <span>
+      <strong>Single page</strong>
+      <small>Check one page on mobile and desktop</small>
+    </span>
+  </label>
 
-      const existing = readHistory()
-      const found = existing.some((entry) => entry.id === audit.id)
+  <label
+    className={
+      'prism-scope-tile ' +
+      (scanMode === 'full-site' ? 'is-selected' : '')
+    }
+  >
+    <input
+      type="radio"
+      name="scan-mode"
+      value="full-site"
+      checked={scanMode === 'full-site'}
+      onChange={() => setScanMode('full-site')}
+    />
 
-      const updatedHistory = found
-        ? existing.map((entry) =>
-            entry.id === audit.id ? updatedAudit : entry
-          )
-        : [updatedAudit, ...existing].slice(0, 50)
+    <span className="prism-scope-icon">
+      <Layers size={21} />
+    </span>
 
-      // Save first. If storage fails, the editor keeps your draft.
-      localStorage.setItem(
-        HISTORY_KEY,
-        JSON.stringify(updatedHistory)
-      )
+    <span>
+      <strong>Website review</strong>
+      <small>Discover public pages and scan selected pages</small>
+    </span>
+  </label>
+</fieldset>
+             <div className="prism-form-footer" id="audit-helper">
+  <span>
+    Review the results and add your expertise before sharing.
+  </span>
 
-      setAudit(updatedAudit)
-      setHistory(updatedHistory)
-    }}
-  />
-)}
+  <span>
+    <FileText size={14} />
+    Editable Report preview
+  </span>
+</div>
 
-{view === 'report' && fullSite && (
-  <section className="space-y-7">
-    <div className="flex items-center justify-between gap-4">
-      <h1 className="font-serif text-3xl">
-        Full website review
-      </h1>
+{isRunning && (
+  <div
+    className="prism-run-status"
+    role="status"
+    aria-live="polite"
+  >
+    <div>
+      <span className="prism-spinner" />
 
-      <button
-        type="button"
-        onClick={startNew}
-        className={secondaryButton}
-      >
-        New audit
-      </button>
+      <strong>
+        {scanMode === 'quick'
+          ? 'Checking this page on mobile and desktop…'
+          : 'Finding public pages and checking selected pages…'}
+      </strong>
     </div>
 
-    <FullSiteAuditReport
-      result={fullSite}
-      profile={profile}
-    />
-  </section>
+    <span>
+      <Clock3 size={14} />
+      {elapsed}s elapsed
+      {elapsed > 45
+        ? ' · The scan is still running. Some websites take longer.'
+        : ''}
+    </span>
+  </div>
 )}
+            </form>
+            <div className="prism-journey" aria-label="Report workflow">
+  <span>01 <strong>Scan website</strong></span>
+  <i />
+  <span>02 <strong>Add your expertise</strong></span>
+  <i />
+  <span>03 <strong>Export report</strong></span>
+</div>
+            <section className="prism-recent" aria-labelledby="recent-heading">
+              <div className="prism-section-heading"><h2 id="recent-heading">Recent reports</h2><button onClick={showReports} disabled={isRunning}>View all reports <ArrowRight size={16}/></button></div>
+              {isRunning ? <p className="prism-muted">You can reopen saved reports after this scan finishes.</p> : <ReportsTable
+  entries={history.slice(0, 3)}
+  onOpen={openReport}
+  onDelete={deleteReport}
+/>}
+            </section>
+          </>}
+          {view === 'reports' && <section className="prism-library">
+            <div className="prism-section-heading"><div><span className="prism-eyebrow">Saved website reviews</span><h1>Your reports</h1><p className="prism-muted">Open a saved report to review its findings and continue your work. Reports are stored in this browser.</p></div><button className="prism-button-primary" onClick={startNew}><Plus size={18}/> New audit</button></div>
+            <label className="prism-search"><Search size={20}/><span className="prism-sr-only">Search saved reports</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by website name or URL"/></label>
+            {history.length > 0 && !filteredHistory.length ? <p className="prism-muted">No reports match your search.</p> : <ReportsTable
+  entries={filteredHistory}
+  onOpen={openReport}
+  onDelete={deleteReport}
+/>}
+          </section>}
+          {view === 'report' && audit && <div className="prism-report-surface" style={theme}>
+            <ReportWorkspace key={audit.id} url={audit.url} pageTitle={audit.pageTitle} auditedAt={audit.savedAt}
+              scores={scoresFor(audit)} report={normaliseReport(audit.report)} profile={profile}
+              onNewAudit={startNew} onDirtyChange={handleDirtyChange} onEditBranding={() => setBrandingOpen(true)}
+              onSave={(report) => {
+                const updatedAudit = { ...audit, report }
+                const existing = readHistory()
+                const found = existing.some((entry) => entry.id === audit.id)
+                const updatedHistory = found ? existing.map((entry) => entry.id === audit.id ? updatedAudit : entry) : [updatedAudit, ...existing].slice(0,50)
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory))
+                setAudit(updatedAudit)
+                setHistory(updatedHistory)
+              }}/>
+          </div>}
+          {view === 'report' && fullSite && <div className="prism-report-surface" style={theme}>
+            <div className="prism-full-heading"><h1>Website review</h1><button type="button" onClick={startNew}>New audit</button></div>
+            <FullSiteAuditReport result={fullSite} profile={profile}/>
+          </div>}
         </div>
       </main>
-
-      <ProfileModal
-        open={brandingOpen}
-        initialProfile={profile}
-        sessionEmail={email}
-        onClose={() => setBrandingOpen(false)}
-        onSave={(nextProfile) => {
-          setProfile(nextProfile)
-          saveStoredProfile(nextProfile)
-          setBrandingOpen(false)
-        }}
-      />
+      {brandingOpen && <AuditBrandDialog profile={profile} onClose={() => setBrandingOpen(false)} onSave={(nextProfile) => {
+        saveStoredProfile(nextProfile)
+        setProfile(nextProfile)
+        setBrandingOpen(false)
+      }}/>}
     </div>
   )
 }
