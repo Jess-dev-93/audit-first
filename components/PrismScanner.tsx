@@ -75,7 +75,7 @@ export default function PrismScanner({ running = false }: { running?: boolean })
           </div>
         </div>
       </div>
-      <div className="wr-flow-caption"><span>Website</span><i>→</i><span>Report preview</span></div>
+      
     </div>
   )
 }

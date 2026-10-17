@@ -1,353 +1,73 @@
-'use client'
-
-import { useEffect, useMemo, useState } from 'react'
-import type { UserProfile } from '../lib/profileStorage'
-import { applyProfilePlaceholdersDeep } from '../lib/templateUtils'
-
-
-type Device = 'mobile' | 'desktop'
-type Tab = 'overview' | 'findings' | 'technical'
-
-interface DeviceScores {
-  performance: number | null
-  seo: number | null
-  accessibility: number | null
-  bestPractices: number | null
-}
-
-interface TechnicalFinding {
-  id?: string
-  title: string
-  categoryLabel?: string
-  priority?: string
-  displayValue?: string | null
-}
-
-interface Scores {
-  mobile: DeviceScores
-  desktop: DeviceScores
-  details: Record<string, unknown>
-  evidence?: {
-    mobile?: { topFindings?: TechnicalFinding[] }
-    desktop?: { topFindings?: TechnicalFinding[] }
-  }
-}
-
-export interface EditableReport {
-  executiveSummary: string
-  keyIssues: string[]
-  businessImpact: string[]
-  recommendations: string[]
-}
-
-interface Props {
-  url: string
-  pageTitle?: string | null
-  auditedAt: string
-  scores: Scores
-  report: EditableReport
-  profile: UserProfile
-  onSave: (report: EditableReport) => void
-  onNewAudit: () => void
-  onEditBranding: () => void
-  onDirtyChange?: (dirty: boolean) => void
-}
-
-const primary =
-  'rounded-lg bg-[#6135ad] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#50258f] disabled:opacity-50'
-
-const secondary =
-  'rounded-lg border border-[#ded6e5] bg-white px-4 py-2.5 text-sm font-medium text-[#6135ad] transition hover:bg-[#f1ebf8]'
-
-const input =
-  'w-full rounded-lg border border-[#ded6e5] bg-white px-3 py-3 text-sm leading-relaxed text-[#271436] outline-none focus:border-[#6135ad] focus:ring-2 focus:ring-[#eee7f8]'
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (character) => {
-    const replacements: Record<string, string> = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    }
-
-    return replacements[character]
-  })
-}
-
-function websiteLabel(value: string) {
-  try {
-    const url = new URL(value)
-    return `${url.hostname.replace(/^www\./, '')}${
-      url.pathname === '/' ? '' : url.pathname
-    }`
-  } catch {
-    return value
-  }
-}
-
-function formatDate(value: string) {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) return 'Date unavailable'
-
-  return date.toLocaleDateString('en-AU', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-}
-
-function cleanReport(report: EditableReport): EditableReport {
-  const cleanList = (items: string[]) =>
-    items.map((item) => item.trim()).filter(Boolean)
-
-  return {
-    executiveSummary: report.executiveSummary.trim(),
-    keyIssues: cleanList(report.keyIssues),
-    businessImpact: cleanList(report.businessImpact),
-    recommendations: cleanList(report.recommendations),
-  }
-}
-
-function ListEditor({
-  label,
-  items,
-  onChange,
-}: {
-  label: string
-  items: string[]
-  onChange: (items: string[]) => void
-}) {
-  return (
-    <div className="space-y-3">
-      <h3 className="font-medium">{label}</h3>
-
-      {items.map((item, index) => (
-        <div key={index} className="flex items-start gap-2">
-          <textarea
-            aria-label={`${label} ${index + 1}`}
-            rows={3}
-            value={item}
-            onChange={(event) =>
-              onChange(
-                items.map((current, position) =>
-                  position === index ? event.target.value : current
-                )
-              )
-            }
-            className={input}
-          />
-
-          <button
-            type="button"
-            aria-label={`Remove ${label.toLowerCase()} ${index + 1}`}
-            onClick={() =>
-              onChange(items.filter((_, position) => position !== index))
-            }
-            className="rounded-lg px-3 py-3 text-[#756b80] hover:bg-[#f1edf5]"
-          >
-            ×
-          </button>
-        </div>
-      ))}
-
-      <button
-        type="button"
-        onClick={() => onChange([...items, ''])}
-        className="text-sm font-medium text-[#6135ad] hover:underline"
-      >
-        + Add another
-      </button>
-    </div>
-  )
-}
-
-function TextList({
-  items,
-  numbered = false,
-}: {
-  items: string[]
-  numbered?: boolean
-}) {
-  if (!items.length) {
-    return (
-      <p className="text-sm text-[#756b80]">
-         No notes added yet. Choose Edit report to add your observations
-  and recommendations.
-      </p>
-    )
-  }
-
-  return (
-    <ul className="divide-y divide-[#e5dfe9]">
-      {items.map((item, index) => (
-        <li key={index} className="flex items-start gap-4 py-5">
-          {numbered ? (
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#eee7f8] text-sm font-medium text-[#6135ad]">
-              {String(index + 1).padStart(2, '0')}
-            </span>
-          ) : (
-            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#6135ad]" />
-          )}
-
-          <p className="whitespace-pre-wrap text-sm leading-7 text-[#493955]">
-            {item}
-          </p>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function documentHtml({
-  title,
-  url,
-  date,
-  report,
-  scores,
-  device,
-  profile,
-}: {
-  title: string
-  url: string
-  date: string
-  report: EditableReport
-  scores: DeviceScores
-  device: Device
-  profile: UserProfile
-}) {
-  const listSection = (heading: string, items: string[]) => {
-    if (!items.length) return ''
-
-    return `
-      <section>
-        <h2>${escapeHtml(heading)}</h2>
-        <ol>
-          ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
-        </ol>
-      </section>
-    `
-  }
-
-  const scoreRows = [
-  ['Performance', scores.performance],
-  ['Basic SEO checks', scores.seo],
-  ['Automated accessibility', scores.accessibility],
-  ['Technical best practices', scores.bestPractices],
-]
-  .map(
-    ([label, value]) =>
-      `<tr><th>${escapeHtml(String(label))}</th><td>${
-        typeof value === 'number'
-          ? value + '/100'
-          : 'Not measured'
-      }</td></tr>`
-  )
-  .join('')
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(title)} - Website review</title>
-  <style>
-    * { box-sizing: border-box; }
-    html { color-scheme: light; }
-    body {
-      margin: 0;
-      padding: 36px;
-      background: #fff;
-      color: #271436;
-      font-family: Arial, sans-serif;
-      font-size: 13px;
-      line-height: 1.65;
-    }
-    main { max-width: 740px; margin: 0 auto; }
-    header {
-      border-bottom: 2px solid #6135ad;
-      padding-bottom: 16px;
-      margin-bottom: 30px;
-    }
-    .brand { font-family: Georgia, serif; font-size: 22px; }
-    h1, h2 { font-family: Georgia, serif; font-weight: normal; }
-    h1 { font-size: 32px; line-height: 1.2; margin: 0 0 10px; }
-    h2 { font-size: 21px; margin: 0 0 12px; }
-    .client { font-size: 17px; margin: 0 0 5px; }
-    .muted { color: #756b80; font-size: 12px; }
-    .url { overflow-wrap: anywhere; }
-    section { margin-top: 28px; }
-    p, li { white-space: pre-wrap; overflow-wrap: anywhere; }
-    ol { margin: 0; padding-left: 22px; }
-    li { padding: 5px 0 9px 5px; break-inside: avoid; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 8px 0; border-bottom: 1px solid #e5dfe9; }
-    th { text-align: left; font-weight: normal; }
-    td { text-align: right; }
-    footer {
-      margin-top: 36px;
-      padding-top: 18px;
-      border-top: 1px solid #e5dfe9;
-      color: #756b80;
-      font-size: 11px;
-    }
-    @page { size: A4; margin: 18mm; }
-    @media print {
-      body { padding: 0; }
-      h1, h2 { break-after: avoid; }
-      header, footer, table { break-inside: avoid; }
-    }
-  </style>
-</head>
-<body>
-  <main>
-    <header>
-      <div class="brand">${escapeHtml(profile.yourCompany || 'Website review')}</div>
-    </header>
-
-    <h1>Website review</h1>
-    <p class="client">${escapeHtml(title)}</p>
-    <div class="muted url">${escapeHtml(url)}</div>
-    <div class="muted">Scanned ${escapeHtml(date)} · Single-page review</div>
-
-    ${
-      report.executiveSummary
-        ? `<section><h2>Review summary</h2><p>${escapeHtml(
-            report.executiveSummary
-          )}</p></section>`
-        : ''
-    }
-
-    ${listSection('Issues and opportunities', report.keyIssues)}
-    ${listSection('Why it matters', report.businessImpact)}
-    ${listSection('Recommended actions', report.recommendations)}
-
-    <section>
-      <h2>${device === 'mobile' ? 'Mobile' : 'Desktop'} scores</h2>
-      <table>${scoreRows}</table>
-    </section>
-
-    <footer>
-  Prepared by ${escapeHtml(profile.yourName || 'Your consultant')}<br>
-  ${escapeHtml(profile.yourCompany || '')}<br>
-  ${escapeHtml(profile.yourWebsite || '')}
-  <p>
-    Scope: the page shown above. Automated checks cover performance,
-    basic SEO, accessibility and technical best practices.
-    Recommendations should be checked against the website and
-    the client's goals. Automated scores do not establish
-    accessibility compliance, search rankings, conversion results
-    or analytics accuracy. Measurements reflect the original
-    test conditions.
-  </p>
-</footer>
-  </main>
-</body>
-</html>`
-}
-
+"use client";
+import "./auditReport.css";
+import { ReportBrand, ReportContact } from "./ReportBrand";
+import { useReportTypography } from "../lib/reportPresentation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  getProfileFallbacks,
+  applyProfilePlaceholdersDeep,
+} from "../lib/templateUtils";
+import type { UserProfile } from "../lib/profileStorage";
+import type { AuditNarrative, Scores } from "../lib/auditTypes";
+import { overviewScoreItems } from "../lib/auditOverview";
+import { buildPageReport } from "../lib/auditReport";
+import { ClipboardCheck, CheckCircle2 } from "lucide-react";
+import { Download, Palette, Plus, FileText, Info } from "lucide-react";
+import {
+  Smartphone,
+  Monitor,
+  Search,
+  Accessibility,
+  Settings2,
+  ChevronRight,
+  Pencil,
+} from "lucide-react";
+import {
+  readClientSections,
+  reviewScopeLine,
+  linkCoverageText,
+  websiteDisplayName,
+} from "../lib/clientAuditReport";
+import { buildAuditDocument } from "../lib/buildAuditDocument";
+import {
+  FindingEvidence,
+  LoadingDiagnostics,
+  ScoreTable,
+  SourceCheckCoverage,
+  pageEvidence,
+  printAuditHtml,
+} from "./AuditEvidence";
+type Props = {
+  url: string;
+  pageTitle?: string | null;
+  auditedAt?: string;
+  scores: Scores;
+  report: AuditNarrative;
+  profile: UserProfile;
+  onSave: (report: AuditNarrative) => void | Promise<void>;
+  onNewAudit: () => void;
+  onEditBranding: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
+};
+const clone = (report: AuditNarrative): AuditNarrative => ({
+  ...report,
+  keyIssues: [...(report.keyIssues || [])],
+  businessImpact: [...(report.businessImpact || [])],
+  recommendations: [...(report.recommendations || [])],
+});
+const cleanDraft = (report: AuditNarrative): AuditNarrative => ({
+  ...report,
+  keyIssues: report.keyIssues.map((v) => v.trim()).filter(Boolean),
+  businessImpact: report.businessImpact.map((v) => v.trim()).filter(Boolean),
+  recommendations: report.recommendations.map((v) => v.trim()).filter(Boolean),
+});
+const comparable = (report: AuditNarrative) =>
+  JSON.stringify([
+    report.executiveSummary,
+    report.keyIssues,
+    report.businessImpact,
+    report.recommendations,
+  ]);
 export default function ReportWorkspace({
   url,
   pageTitle,
@@ -359,412 +79,821 @@ export default function ReportWorkspace({
   onNewAudit,
   onEditBranding,
   onDirtyChange,
+  
 }: Props) {
-  const [tab, setTab] = useState<Tab>('overview')
-  const [device, setDevice] = useState<Device>('mobile')
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState<EditableReport>(() =>
-    applyProfilePlaceholdersDeep(report, profile)
-  )
-  const [message, setMessage] = useState<string | null>(null)
+  const { typography, ready: presentationReady } = useReportTypography();
+  const brandProfile = {
+    ...getProfileFallbacks(profile),
+    yourLogo: profile.yourLogo,
+  };
+ 
+const [previewHeight, setPreviewHeight] = useState(1000);
 
-  const title = pageTitle?.trim() || websiteLabel(url)
-  const activeScores = scores[device]
+// Reference to the report preview
+const previewFrameRef = useRef<HTMLIFrameElement>(null);
 
-  const savedReport = applyProfilePlaceholdersDeep(report, profile)
-  const dirty =
-    JSON.stringify(cleanReport(draft)) !==
-    JSON.stringify(cleanReport(savedReport))
+// Receive the preview height
+const resizePreview = useCallback((event: MessageEvent) => {
+  if (event.source !== previewFrameRef.current?.contentWindow) return;
+  if (event.data?.type !== "audit-preview-height") return;
 
+  const height = Number(event.data.height);
+
+  if (
+    Number.isFinite(height) &&
+    height > 0 &&
+    height < 100000
+  ) {
+    setPreviewHeight(Math.ceil(height) + 16);
+  }
+}, []);
+
+// Listen for preview height updates
+useEffect(() => {
+  window.addEventListener("message", resizePreview);
+
+  return () => {
+    window.removeEventListener("message", resizePreview);
+  };
+}, [resizePreview]);
+
+  const prepared = useMemo(
+    () => applyProfilePlaceholdersDeep(report, profile) as AuditNarrative,
+    [report, profile],
+  );
+  const [draft, setDraft] = useState(() => clone(prepared)),
+    [saved, setSaved] = useState(() => comparable(prepared)),
+    [tab, setTab] = useState("overview"),
+    [message, setMessage] = useState(""),
+    [saving, setSaving] = useState(false),
+    [includeEvidence, setIncludeEvidence] = useState(false),
+    [editingOverview, setEditingOverview] = useState(false);
+  const lastSubmitted = useRef<string | null>(null);
+  const [reviewChecks, setReviewChecks] = useState<boolean[]>(
+  () => [false, false, false, false, false]
+);
+
+const reviewItems = [
+  "Confirm flagged issues on the actual website",
+  "Test mobile usability and keyboard navigation",
+  "Review messaging and calls to action",
+  "Add your observations and recommendations",
+  "Check the final PDF against the evidence",
+];
+
+const completedReviews = reviewChecks.filter(Boolean).length;
+
+const toggleReview = (index: number) => {
+  setReviewChecks((previous) =>
+    previous.map((checked, i) =>
+      i === index ? !checked : checked
+    )
+  );
+};
+  const previousReport = useRef(report);
+  const scanIdentity = useRef(url + "|" + (auditedAt || ""));
   useEffect(() => {
-    onDirtyChange?.(dirty)
-    return () => onDirtyChange?.(false)
-  }, [dirty, onDirtyChange])
-
-  useEffect(() => {
-    if (!dirty) return
-    const protect = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ''
+    const identity = url + "|" + (auditedAt || "");
+    const sameScan = identity === scanIdentity.current;
+    scanIdentity.current = identity;
+    const sameReport = previousReport.current === report;
+    previousReport.current = report;
+    if (sameScan && sameReport) return;
+    if (sameScan && lastSubmitted.current === comparable(prepared)) {
+      // A save acknowledgement must not replace edits typed after that save.
+      setSaved(comparable(prepared));
+      return;
     }
-    window.addEventListener('beforeunload', protect)
-    return () => window.removeEventListener('beforeunload', protect)
-  }, [dirty])
-
-  const preview = useMemo(
+    lastSubmitted.current = null;
+    setDraft(clone(prepared));
+    setSaved(comparable(prepared));
+    setMessage("");
+  }, [prepared, report, url, auditedAt]);
+  const dirty = comparable(draft) !== saved;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+  const findings = useMemo(() => pageEvidence(url, scores), [url, scores]);
+  const clientSections = useMemo(
+    () => readClientSections(cleanDraft(draft), findings),
+    [draft, findings],
+  );
+  const highlights = useMemo(
     () =>
-      documentHtml({
-        title,
+      clientSections.rows.slice(0, 3).map((row) => ({
+        key: row.title,
+        title: row.title,
+        action: row.help,
+        observation: row.observation,
+        impact: row.impact,
+        evidence: row.evidence,
+        coverage: row.coverage,
+        loadingContext: row.loadingContext,
+      })),
+    [clientSections],
+  );
+  const generatedClient = useMemo(
+    () => buildPageReport(url, scores),
+    [url, scores],
+  );
+  const suggestion = generatedClient.executiveSummary;
+  const scoreItems = useMemo(() => overviewScoreItems(scores), [scores]);
+  const document = useMemo(
+    () =>
+      buildAuditDocument({
         url,
-        date: formatDate(auditedAt),
-        report: cleanReport(draft),
-        scores: activeScores,
-        device,
-        profile,
+        pageTitle: pageTitle || "",
+        generatedAt: auditedAt,
+        report: cleanDraft(draft),
+        scores,
+        profile: {
+          ...getProfileFallbacks(profile),
+          yourLogo: profile?.yourLogo,
+        },
+        includeEvidence,
+        typography,
       }),
-    [title, url, auditedAt, draft, activeScores, device, profile]
-  )
-
-  const findings = scores.evidence?.[device]?.topFindings ?? []
-
-  const save = () => {
+    [
+      url,
+      pageTitle,
+      auditedAt,
+      draft,
+      scores,
+      profile,
+      includeEvidence,
+      typography,
+    ],
+  );
+  const updateList = (
+    key: "keyIssues" | "businessImpact" | "recommendations",
+    value: string,
+  ) =>
+    setDraft((prev) => ({
+      ...prev,
+      [key]: value.split("\n"),
+      clientNextStep: undefined,
+    }));
+  const save = async () => {
+    setSaving(true);
+    setMessage("");
     try {
-      const cleaned = cleanReport(draft)
-      onSave(cleaned)
-      setDraft(cleaned)
-      setEditing(false)
-      setMessage('Changes saved in this browser.')
+      const submitted = comparable(draft);
+      const cleaned = cleanDraft(draft);
+      lastSubmitted.current = comparable(cleaned);
+      await onSave(cleaned);
+      // Preserve any typing that happened while the save request was pending.
+      setDraft((current) =>
+        comparable(current) === submitted ? cleaned : current,
+      );
+      setSaved(comparable(cleaned));
+      setMessage("Changes saved.");
     } catch {
+      lastSubmitted.current = null;
       setMessage(
-  'Your changes could not be saved in this browser. Your draft is still open. Use Save as PDF to keep a copy before leaving.'
-)
+        "The report could not be saved. You can still export your current edits.",
+      );
+    } finally {
+      setSaving(false);
     }
-  }
-
-  const openDocument = (print: boolean) => {
-    const popup = window.open('', '_blank')
-
-    if (!popup) {
-      setMessage('Allow pop-ups for this site to open the report.')
-      return
-    }
-
-    popup.opener = null
-    popup.document.open()
-    popup.document.write(preview)
-    popup.document.close()
-    popup.focus()
-
-    if (print) {
-      popup.setTimeout(() => popup.print(), 250)
-    }
-  }
-
-  // Navigation protection lives in the parent, including sidebar exits.
-  const leave = () => onNewAudit()
-
+  };
+  
+  const newAudit = () => {
+    if (
+      dirty &&
+      !window.confirm("Start a new audit without saving these edits?")
+    )
+      return;
+    onNewAudit();
+  };
   return (
-    <section className="space-y-7">
-      <div className="flex flex-wrap items-start justify-between gap-5">
-        <div>
-          <h1 className="font-sans font-semibold text-3xl tracking-tight sm:text-4xl">
-            Website review
-          </h1>
+    <section className="audit-report-workspace">
+      
 
-          <p className="mt-3 break-all text-sm text-[#756b80]">
-            {websiteLabel(url)} · Scanned {formatDate(auditedAt)}
-          </p>
-        </div>
+<header className="audit-report-header">
+  <div className="audit-report-heading-row">
+    <div className="audit-report-heading-copy">
+      <span className="audit-report-kicker">
+        WEBSITE AUDIT REPORT
+      </span>
 
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={leave} className={secondary}>
-            New audit
+      <h1>
+        Single-page review of {websiteDisplayName(pageTitle, url)}
+      </h1>
+
+      <p className="audit-report-subtitle">
+        {url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+        {auditedAt && (
+          <>
+            {" · "}
+            {new Date(auditedAt).toLocaleDateString("en-AU", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </>
+        )}
+      </p>
+    </div>
+
+    <div className="audit-report-header-brand">
+      <ReportBrand profile={brandProfile} />
+    </div>
+  </div>
+
+  <div className="audit-report-toolbar">
+    <div className="audit-report-actions">
+      <button
+        type="button"
+        className="audit-export-button"
+        disabled={!presentationReady}
+        onClick={() =>
+          setMessage(
+            printAuditHtml(document)
+              ? ""
+              : "Allow pop-ups to open the printable report."
+          )
+        }
+      >
+        <Download size={19} />
+        {presentationReady ? "Export PDF" : "Preparing PDF…"}
+      </button>
+
+      <button type="button" onClick={onEditBranding}>
+        <Palette size={19} />
+        Edit branding
+      </button>
+
+      <button type="button" onClick={newAudit}>
+        <Plus size={19} />
+        New audit
+      </button>
+    </div>
+
+    <label className="audit-evidence-option">
+      <input
+        type="checkbox"
+        checked={includeEvidence}
+        onChange={(event) => setIncludeEvidence(event.target.checked)}
+      />
+      <span>Detailed findings in PDF</span>
+
+      <span
+        className="audit-evidence-info"
+        title="Include detailed technical findings in the exported PDF."
+      >
+        <Info size={16} />
+      </span>
+    </label>
+  </div>
+</header>
+
+
+      <nav aria-label="Report sections" className="audit-report-tabs">
+        {["overview", "findings", "technical", "preview"].map((value) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={tab === value}
+            onClick={() => setTab(value)}
+            className={
+              "rounded-lg border px-4 py-2 text-sm capitalize " +
+              (tab === value
+                ? "border-violet-500 bg-violet-500/10"
+                : "border-border")
+            }
+          >
+            {value === "technical" ? "Evidence" : value}
           </button>
+        ))}
+      </nav>
+      <div className="audit-report-body">
+      
+{tab === "overview" && (
+  <div className="audit-overview">
+
+    {/* Overview heading */}
+    <section className="audit-overview-hero">
+      <div className="audit-overview-hero-copy">
+        <span className="audit-overview-eyebrow">
+          THE PAGE AT A GLANCE
+        </span>
+
+        <h2>A smoother experience for your visitors</h2>
+
+        <p>
+          Mobile and desktop results available
+          <span aria-hidden="true"> · </span>
+          Automated public-page checks
+        </p>
+      </div>
+
+      {/* Decorative browser illustration */}
+      <div className="audit-overview-art" aria-hidden="true">
+        <div className="audit-art-orbit" />
+        <div className="audit-art-browser">
+          <div className="audit-art-browser-top">
+            <i /><i /><i />
+          </div>
+          <div className="audit-art-browser-body">
+            <div className="audit-art-image">
+              <span />
+            </div>
+            <div className="audit-art-lines">
+              <i /><i /><i /><i />
+            </div>
+          </div>
+        </div>
+        <div className="audit-art-phone">
+          <div />
+          <i /><i /><i />
+        </div>
+        <span className="audit-art-sparkle audit-art-sparkle-one">✦</span>
+        <span className="audit-art-sparkle audit-art-sparkle-two">✦</span>
+      </div>
+    </section>
+
+    {/* Dynamic audit scores */}
+    <section
+      className="audit-overview-scores"
+      aria-label="Website audit scores"
+    >
+      {scoreItems.map((item, index) => {
+        const ScoreIcon = [
+          Smartphone,
+          Monitor,
+          Search,
+          Accessibility,
+          Settings2,
+        ][index] ?? Settings2;
+
+        const tone =
+          item.value === null
+            ? "neutral"
+            : item.value >= 90
+              ? "good"
+              : item.value >= 50
+                ? "warning"
+                : "poor";
+
+        return (
+          <div
+            key={item.label}
+            className={`audit-overview-score audit-tone-${tone}`}
+          >
+            <p className="audit-overview-score-label">
+              {item.label}
+            </p>
+
+            <div className="audit-overview-score-middle">
+              <div
+                className="audit-overview-score-value"
+                style={{
+                  color: item.value === null
+                    ? undefined
+                    : item.colour,
+                }}
+              >
+                {item.value === null ? (
+                  <span className="audit-score-unavailable">
+                    {item.availability.label}
+                  </span>
+                ) : (
+                  <>
+                    <strong>{item.value}</strong>
+                    <span>/100</span>
+                  </>
+                )}
+              </div>
+
+              <span className="audit-overview-score-icon">
+                <ScoreIcon size={20} strokeWidth={1.9} />
+              </span>
+            </div>
+
+            <p className="audit-overview-score-meaning">
+              {item.meaning}
+            </p>
+
+            {item.value === null &&
+              item.availability.reason && (
+                <p className="audit-overview-score-reason">
+                  {item.availability.reason}
+                </p>
+              )}
+          </div>
+        );
+      })}
+    </section>
+
+    {/* Client-facing summary */}
+    <section className="audit-overview-details">
+
+      <div className="audit-overview-summary">
+        <div className="audit-overview-section-heading">
+          <h3>Client overview</h3>
 
           <button
             type="button"
-            onClick={() => openDocument(false)}
-            className={secondary}
+            className="audit-overview-edit"
+            onClick={() => setEditingOverview((v) => !v)}
           >
-            Preview report
+            <Pencil size={17} />
+            {editingOverview ? "Done editing" : "Edit overview"}
           </button>
+        </div>
+
+        {editingOverview ? (
+          <textarea
+            aria-label="Client overview"
+            rows={7}
+            value={draft.executiveSummary}
+            onChange={(event) =>
+              setDraft((prev) => ({
+                ...prev,
+                executiveSummary: event.target.value,
+              }))
+            }
+            className="audit-overview-textarea"
+          />
+        ) : (
+          <p className="audit-overview-description">
+            {draft.executiveSummary ||
+              "Add a short client-friendly overview of the audit results."}
+          </p>
+        )}
 
         <button
-  type="button"
-  onClick={() => openDocument(true)}
-  className={primary}
->
-  Save as PDF
-</button>
-        </div>
+          type="button"
+          className="audit-overview-suggestion"
+          onClick={() => {
+            setDraft((prev) => ({
+              ...prev,
+              executiveSummary: suggestion,
+            }));
+            setEditingOverview(true);
+            setMessage(
+              "Suggested overview added. Save changes to keep it."
+            );
+          }}
+        >
+          Use suggested overview
+        </button>
+
+        {generatedClient.strengths?.length ? (
+          <details className="audit-overview-strengths">
+            <summary>What is already working well</summary>
+
+            <ul>
+              {generatedClient.strengths.map((strength, index) => (
+                <li key={index}>{strength}</li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </div>
 
-      {message && (
-        <p role="status" className="rounded-lg bg-[#eee7f8] p-4 text-sm text-[#6135ad]">
-          {message}
+      <div className="audit-overview-priorities">
+        <div className="audit-overview-section-heading">
+          <h3>Where we can help</h3>
+        </div>
+
+        <p className="audit-overview-priorities-intro">
+          Focused improvements suggested by the scan evidence.
         </p>
-      )}
 
-      <div className="AuditUnfold-score-strip flex flex-wrap items-center gap-6 rounded-xl border border-[#e5dfe9] bg-white p-5">
-        <span className="text-sm font-medium">Single-page review</span>
-
-        <div className="inline-flex rounded-lg bg-[#f4f0f7] p-1">
-          {(['mobile', 'desktop'] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setDevice(mode)}
-              aria-pressed={device === mode}
-              className={`rounded-md px-3 py-2 text-sm ${
-                device === mode
-                  ? 'bg-[#e9dff6] font-medium text-[#6135ad]'
-                  : 'text-[#756b80]'
-              }`}
-            >
-              {mode === 'mobile' ? 'Mobile' : 'Desktop'}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid flex-1 grid-cols-2 gap-5 sm:grid-cols-4">
-          {[
-             ['Performance', activeScores.performance],
-  ['Basic SEO checks', activeScores.seo],
-  ['Automated accessibility', activeScores.accessibility],
-  ['Technical best practices', activeScores.bestPractices],
-          ].map(([label, value]) => (
-            <div key={String(label)}>
-              <p className="text-xs text-[#756b80]">{label}</p>
-              <p className="mt-1 font-sans font-semibold text-2xl">
-                {typeof value === 'number' ? value : '—'}
-                <span className="ml-1 font-sans text-xs text-[#756b80]">
-                  {typeof value === 'number' ? '/100' : 'Not measured'}
-                </span>
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-<p className="text-xs leading-5 text-[#756b80]">
-  These scores cover automated checks on this page.
-  They do not measure the whole website or replace a manual review.
-  Switching devices changes the test results and PDF score table;
-  your written report stays the same.
-</p>
-      <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.8fr)]">
-        <div className="min-w-0">
-          <div className="flex gap-5 border-b border-[#e5dfe9]">
-            {[
-              ['overview', 'Overview'],
-              ['findings', 'Findings'],
-              ['technical', 'Test results'],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setTab(value as Tab)}
-                aria-pressed={tab === value}
-                className={`border-b-2 pb-3 text-sm ${
-                  tab === value
-                    ? 'border-[#6135ad] font-medium text-[#6135ad]'
-                    : 'border-transparent text-[#756b80]'
-                }`}
+        {highlights.length ? (
+          <div className="audit-priority-list">
+            {highlights.map((highlight, index) => (
+              <details
+                className="audit-priority-item"
+                key={`${highlight.key}-${index}`}
               >
-                {label}
-              </button>
-            ))}
-          </div>
+                <summary className="audit-priority-trigger">
+                  <span className="audit-priority-number">
+                    {index + 1}
+                  </span>
 
-          <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-[#756b80]">
-              {dirty ? 'Unsaved report changes' : 'Check the findings and add your recommendations before sharing'}
-            </p>
+                  <span className="audit-priority-title">
+                    <strong>{highlight.title}</strong>
+                    {highlight.coverage && (
+                      <small>{highlight.coverage}</small>
+                    )}
+                  </span>
 
-            {editing ? (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDraft(savedReport)
-                    setEditing(false)
-                    setMessage(null)
-                  }}
-                  className={secondary}
-                >
-                  Cancel
-                </button>
+                  <ChevronRight
+                    className="audit-priority-chevron"
+                    size={19}
+                  />
+                </summary>
 
-                <button type="button" onClick={save} className={primary}>
-                  Save changes
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditing(true)
-                  setMessage(null)
-                }}
-                className="text-sm font-medium text-[#6135ad] hover:underline"
-              >
-                ✎ Edit report
-              </button>
-            )}
-          </div>
+                <div className="audit-priority-content">
+                  {highlight.observation && (
+                    <p>
+                      <strong>What we found: </strong>
+                      {highlight.observation}
+                    </p>
+                  )}
 
-          {editing && (
-            <div className="mt-6 space-y-7 rounded-xl border border-[#e5dfe9] bg-white p-5">
-              <label className="block">
-                <span className="mb-3 block font-medium">
-                  Review summary
-                </span>
-                <textarea
-                  rows={6}
-                  value={draft.executiveSummary}
-                  onChange={(event) =>
-                    setDraft({ ...draft, executiveSummary: event.target.value })
-                  }
-                  className={input}
-                />
-              </label>
+                  {highlight.impact && (
+                    <p>
+                      <strong>Why it matters: </strong>
+                      {highlight.impact}
+                    </p>
+                  )}
 
-              <ListEditor
-                label="Issues and opportunities"
-                items={draft.keyIssues}
-                onChange={(keyIssues) => setDraft({ ...draft, keyIssues })}
-              />
+                  {highlight.action && (
+                    <p>
+                      <strong>Recommended action: </strong>
+                      {highlight.action}
+                    </p>
+                  )}
 
-              <ListEditor
-                label="Why it matters"
-                items={draft.businessImpact}
-                onChange={(businessImpact) =>
-                  setDraft({ ...draft, businessImpact })
-                }
-              />
+                  {highlight.loadingContext.map((line, i) => (
+                    <p className="audit-priority-evidence" key={`l-${i}`}>
+                      {line}
+                    </p>
+                  ))}
 
-              <ListEditor
-                label="Recommended actions"
-                items={draft.recommendations}
-                onChange={(recommendations) =>
-                  setDraft({ ...draft, recommendations })
-                }
-              />
-            </div>
-          )}
-
-          {!editing && tab === 'overview' && (
-            <div className="mt-8 space-y-8">
-              <section>
-                <h2 className="font-sans font-semibold text-2xl">Review summary</h2>
-                <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-[#493955]">
-                 {draft.executiveSummary ||
-  'No summary added yet. Choose Edit report to explain what you found and what you recommend.'}
-                </p>
-              </section>
-
-              <section>
-                <h2 className="font-sans font-semibold text-2xl">Top findings</h2>
-                <TextList items={draft.keyIssues.slice(0, 3)} numbered />
-
-                {draft.keyIssues.length > 3 && (
-                  <button
-                    type="button"
-                    onClick={() => setTab('findings')}
-                    className="text-sm font-medium text-[#6135ad] hover:underline"
-                  >
-                    View all {draft.keyIssues.length} findings →
-                  </button>
-                )}
-              </section>
-
-              <section>
-                <h2 className="font-sans font-semibold text-2xl">
-                  Recommended actions
-                </h2>
-                <TextList items={draft.recommendations} />
-              </section>
-            </div>
-          )}
-
-          {!editing && tab === 'findings' && (
-            <div className="mt-8 space-y-8">
-              <section>
-                <h2 className="font-sans font-semibold text-2xl">Issues and opportunities</h2>
-                <TextList items={draft.keyIssues} numbered />
-              </section>
-
-              <section>
-                <h2 className="font-sans font-semibold text-2xl">
-                  Why it matters
-                </h2>
-                <TextList items={draft.businessImpact} />
-              </section>
-            </div>
-          )}
-
-          {!editing && tab === 'technical' && (
-            <div className="mt-8 space-y-6">
-              <div>
-                <h2 className="font-sans font-semibold text-2xl">Automated test results</h2>
-                <p className="mt-3 text-sm leading-6 text-[#756b80]">
-  Results from the original {device} scan. Use these to support
-  your review and check any issues before recommending fixes.
-  Editing the report does not change the test results.
-</p>
-              </div>
-
-              {findings.length ? (
-                <div className="divide-y divide-[#e5dfe9]">
-                  {findings.map((finding, index) => (
-                    <div key={finding.id || index} className="py-5">
-                      <p className="text-xs text-[#756b80]">
-                        {finding.categoryLabel || 'Lighthouse finding'}
-                      </p>
-                      <h3 className="mt-2 font-medium">{finding.title}</h3>
-                      {finding.displayValue && (
-                        <p className="mt-2 text-sm text-[#756b80]">
-                          {finding.displayValue}
-                        </p>
-                      )}
-                    </div>
+                  {highlight.evidence.map((line, i) => (
+                    <p className="audit-priority-evidence" key={`e-${i}`}>
+                      {line}
+                    </p>
                   ))}
                 </div>
-              ) : (
-                <p className="text-sm text-[#756b80]">
-  This saved report does not include detailed {device} findings.
-  This does not mean the page passed every check.
-</p>
-              )}
-
-              <details className="rounded-lg border border-[#e5dfe9] bg-white p-4">
-                <summary className="cursor-pointer text-sm font-medium">
-                  Raw test data
-                </summary>
-                <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs text-[#756b80]">
-                  {JSON.stringify(scores.details, null, 2)}
-                </pre>
               </details>
-            </div>
-          )}
-        </div>
-
-        <aside className="AuditUnfold-preview min-w-0 rounded-xl border border-[#e5dfe9] bg-[#f4f1f6] p-4 xl:sticky xl:top-6">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="font-sans font-semibold text-xl">Report preview</h2>
-            {dirty && (
-              <span className="text-xs text-[#756b80]">Draft preview</span>
-            )}
+            ))}
           </div>
-
-          <iframe
-            title="Client report preview"
-            srcDoc={preview}
-            sandbox=""
-            className="h-[600px] w-full rounded-sm border border-[#e5dfe9] bg-white shadow-sm"
-          />
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs leading-5 text-[#756b80]">
-              <p>Prepared by {profile.yourName}</p>
-              <p>{profile.yourCompany}</p>
-            </div>
-
-            <button
-              type="button"
-              onClick={onEditBranding}
-              className={secondary}
-            >
-              Report branding
-            </button>
-          </div>
-
-          <p className="mt-4 text-xs leading-5 text-[#756b80]">
-  The preview and PDF include your current edits and the selected
-  device scores. Save changes to keep your edits in this browser.
-  To download a PDF, choose Save as PDF in the print dialog.
-</p>
-        </aside>
+        ) : (
+          <p className="audit-overview-empty">
+            No actionable issues were returned by the available
+            checks. A manual review is still recommended.
+          </p>
+        )}
       </div>
     </section>
-  )
+
+    <p className="audit-overview-disclaimer">
+      Automated results reflect the checks performed at scan time.
+      Passing scores do not guarantee that every issue has been
+      identified. Additional manual review may be needed.
+    </p>
+  </div>
+)}
+
+      {tab === "findings" && (
+  <div className="audit-findings">
+    <div className="audit-findings-heading">
+      <div>
+        <span className="audit-findings-eyebrow">
+          REPORT CONTENT
+        </span>
+        <h2>Shape your recommendations</h2>
+        <p>
+          Review and refine the findings before sharing your
+          report with a client.
+        </p>
+      </div>
+    </div>
+          {(["keyIssues", "businessImpact", "recommendations"] as const).map(
+            (key, index) => (
+              <article
+                key={key}
+                className="audit-findings-card"
+              >
+                <label htmlFor={"audit-" + key} className="block font-semibold">
+                  {
+                    [
+                      "Priorities",
+                      "Why this matters for visitors",
+                      "Recommended actions",
+                    ][index]
+                  }
+                </label>
+                <p
+                  id={"audit-help-" + key}
+                  className="mt-2 max-w-[75ch] text-xs leading-6 text-muted-foreground"
+                >
+                  {key === "keyIssues"
+                    ? "Press Enter after each priority. The PDF adds the numbering for you."
+                    : "Press Enter after each point. The PDF adds the bullet points for you."}
+                </p>
+                <textarea
+                  id={"audit-" + key}
+                  rows={5}
+                  aria-describedby={"audit-help-" + key}
+                  value={draft[key].join("\n")}
+                  onChange={(event) => updateList(key, event.target.value)}
+                  className="audit-findings-textarea"
+                />
+              </article>
+            ),
+          )}
+        </div>
+      )}
+      
+{tab === "technical" && (
+  <div className="audit-evidence-workspace">
+
+    <div className="audit-evidence-heading">
+      <span className="audit-findings-eyebrow">
+        TECHNICAL EVIDENCE
+      </span>
+
+      <h2>Understand the results</h2>
+
+      <p>
+        Explore the checks behind your report and confirm
+        important findings before sharing.
+      </p>
+    </div>
+
+    {/* Human review checklist */}
+    <section className="audit-review-checklist">
+      <div className="audit-review-checklist-header">
+        <div className="audit-review-checklist-heading">
+          <span className="audit-review-checklist-icon">
+            <ClipboardCheck size={23} />
+          </span>
+
+          <div>
+            <h3>Before you share your report</h3>
+            <p>
+              Five recommended manual checks to help validate
+              your audit.
+            </p>
+          </div>
+        </div>
+
+        <span className="audit-review-count">
+          {completedReviews} / {reviewItems.length} completed
+        </span>
+      </div>
+
+      <div
+        className="audit-review-progress"
+        role="progressbar"
+        aria-label="Manual review progress"
+        aria-valuemin={0}
+        aria-valuemax={reviewItems.length}
+        aria-valuenow={completedReviews}
+      >
+        <div
+          style={{
+            width: `${
+              (completedReviews / reviewItems.length) * 100
+            }%`,
+          }}
+        />
+      </div>
+
+      <div className="audit-review-items">
+        {reviewItems.map((item, index) => (
+          <label
+            key={item}
+            className={
+              "audit-review-item " +
+              (reviewChecks[index] ? "is-complete" : "")
+            }
+          >
+            <input
+              type="checkbox"
+              checked={reviewChecks[index]}
+              onChange={() => toggleReview(index)}
+            />
+
+            <span>{item}</span>
+
+            {reviewChecks[index] && (
+              <CheckCircle2 size={19} />
+            )}
+          </label>
+        ))}
+      </div>
+
+      <p className="audit-review-note">
+        These checks are completed manually. They are not
+        verified by the automated scanner.
+      </p>
+    </section>
+
+    {/* Existing technical evidence */}
+    <section className="audit-evidence-results">
+      <h3>Score breakdown</h3>
+
+      <ScoreTable
+        pages={[
+          {
+            url,
+            pageType: pageTitle || "Audited page",
+            scores,
+          },
+        ]}
+      />
+    </section>
+
+    <section className="audit-evidence-results">
+      <h3>Check coverage</h3>
+      <SourceCheckCoverage scores={scores} />
+    </section>
+
+    <section className="audit-evidence-results">
+      <h3>Supporting findings</h3>
+      <FindingEvidence findings={findings} />
+    </section>
+
+    <section className="audit-evidence-results">
+      <h3>Loading diagnostics</h3>
+
+      <LoadingDiagnostics
+        pages={[
+          {
+            url,
+            pageType: pageTitle || "Audited page",
+            scores,
+          },
+        ]}
+      />
+    </section>
+
+  </div>
+)}
+
+      {tab === "preview" && (
+  <iframe
+    ref={previewFrameRef}
+    title="Printable client report preview"
+    sandbox="allow-scripts"
+    srcDoc={`
+      ${document}
+      <script>
+        const sendHeight = () => {
+          const height = Math.max(
+            document.documentElement.scrollHeight,
+            document.body.scrollHeight
+          );
+
+          window.parent.postMessage({
+            type: "audit-preview-height",
+            height
+          }, "*");
+        };
+
+        window.addEventListener("load", sendHeight);
+
+        new ResizeObserver(sendHeight).observe(
+          document.documentElement
+        );
+      </script>
+    `}
+    scrolling="no"
+    style={{ height: `${previewHeight}px` }}
+    className="audit-preview-frame"
+  />
+)}
+      <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5">
+        <div>
+          <p
+            role="status"
+            aria-live="polite"
+            className="text-sm text-secondary-foreground"
+          >
+            {message.includes("could not") || message.includes("Allow pop-ups")
+              ? message
+              : dirty
+                ? "Unsaved changes"
+                : message || "No unsaved changes"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Save changes keeps your edits in this report.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={save}
+          className="rounded-lg bg-violet-600 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+        >
+          {saving ? "Saving…" : "Save changes"}
+        </button>
+      </footer>
+        
+      <p className="text-xs leading-6 text-muted-foreground">
+        Automated public-page review. Form submissions, payments, sign-in and
+        backend processing were not tested.
+      </p>
+
+      <ReportContact profile={brandProfile} />
+      </div>
+    </section>
+  );
 }

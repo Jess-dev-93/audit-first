@@ -25,7 +25,7 @@ import FullSiteAuditReport from '../../../components/FullSiteAuditReport'
 import type { FullSiteAuditResult } from '../../../components/FullSiteAuditReport'
 import AuditBrandDialog from '../../../components/AuditBrandDialog'
 import PrismScanner from '../../../components/PrismScanner'
-import { ArrowRight, FileText, Palette, Plus, Search, Monitor, Globe, Layers, Clock3, Trash2, PanelLeftClose, PanelLeftOpen, ChevronRight } from 'lucide-react'
+import { ArrowRight, ArrowLeft, FileText, Palette, Plus, Search, Monitor, Globe, Layers, Clock3, Trash2, PanelLeftClose, PanelLeftOpen, ChevronRight } from 'lucide-react'
 import './sitebrief.css'
 
 type View = 'new' | 'reports' | 'report'
@@ -310,7 +310,23 @@ function AuditUnfoldWorkspace() {
   const dirtyRef = useRef(false)
   const [elapsed, setElapsed] = useState(0)
   const queryUrl = searchParams.get('url') || ''
+const navigateTo = (nextView: View, reportId?: string) => {
+  const nextUrl = new URL(window.location.href)
 
+  nextUrl.searchParams.delete('url')
+  nextUrl.searchParams.delete('view')
+  nextUrl.searchParams.delete('report')
+
+  if (nextView === 'reports') {
+    nextUrl.searchParams.set('view', 'reports')
+  }
+
+  if (nextView === 'report' && reportId) {
+    nextUrl.searchParams.set('report', reportId)
+  }
+
+  window.history.pushState(null, '', nextUrl)
+}
   useEffect(() => {
     if (!isRunning) return
     const started = Date.now()
@@ -351,13 +367,54 @@ function AuditUnfoldWorkspace() {
       setError('Saved reports could not be read from this browser.')
     }
   }, [])
+useEffect(() => {
+  if (authLoading || (AUTH_REQUIRED && !userId)) return
 
+  const restoreLocation = () => {
+    const params = new URLSearchParams(window.location.search)
+    const reportId = params.get('report')
+    const requestedView = params.get('view')
+
+    if (reportId) {
+      try {
+        const entry = readHistory().find((item) => item.id === reportId)
+
+        if (entry) {
+          setHistory(readHistory())
+          setAudit(entry.fullSiteResult ? null : entry)
+          setFullSite(entry.fullSiteResult ?? null)
+          setView('report')
+          return
+        }
+      } catch {
+        setError('This saved report could not be opened.')
+      }
+
+      setError('This report is no longer available in this browser.')
+      setView('reports')
+      return
+    }
+
+    setAudit(null)
+    setFullSite(null)
+    setView(requestedView === 'reports' ? 'reports' : 'new')
+  }
+
+  restoreLocation()
+
+  window.addEventListener('popstate', restoreLocation)
+
+  return () => {
+    window.removeEventListener('popstate', restoreLocation)
+  }
+}, [authLoading, userId])
   const openReport = (entry: SavedAudit) => {
     if (!canLeave()) return
     setAudit(entry.fullSiteResult ? null : entry)
     setFullSite(entry.fullSiteResult || null)
     setError(null)
     setView('report')
+    navigateTo('report', entry.id)
     window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }
 
@@ -369,6 +426,7 @@ function AuditUnfoldWorkspace() {
     setError(null)
     setUrl('')
     setView('new')
+    navigateTo('new')
     refreshHistory()
   }
 
@@ -378,6 +436,7 @@ function AuditUnfoldWorkspace() {
     refreshHistory()
     setError(null)
     setView('reports')
+    navigateTo('reports')
   }
 
   const runAudit = async (event: FormEvent<HTMLFormElement>) => {
@@ -447,6 +506,7 @@ function AuditUnfoldWorkspace() {
           const updated = [entry, ...readHistory()].slice(0, 50)
           localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
           setHistory(updated)
+          navigateTo('report', entry.id)
         } catch {
           setError('Your report is ready, but could not be saved in this browser. Export a copy before leaving.')
         }
@@ -483,6 +543,7 @@ function AuditUnfoldWorkspace() {
 
         localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
         setHistory(updated)
+        navigateTo('report', entry.id)
       } catch {
         setError(
           'Your report is ready, but could not be saved in this browser. Download a copy before leaving.'
@@ -512,6 +573,7 @@ function AuditUnfoldWorkspace() {
 
     localStorage.setItem(HISTORY_KEY, JSON.stringify(updated))
     setHistory(updated)
+    navigateTo('report', entry.id)
     setError(null)
 
     if (audit?.id === entry.id) {
@@ -746,6 +808,14 @@ function AuditUnfoldWorkspace() {
 />}
           </section>}
           {view === 'report' && audit && <div className="prism-report-surface" style={theme}>
+            <button
+  type="button"
+  className="prism-back-button"
+  onClick={showReports}
+>
+  <ArrowLeft size={18} />
+  All reports
+</button>
             <ReportWorkspace key={audit.id} url={audit.url} pageTitle={audit.pageTitle} auditedAt={audit.savedAt}
               scores={scoresFor(audit)} report={normaliseReport(audit.report)} profile={profile}
               onNewAudit={startNew} onDirtyChange={handleDirtyChange} onEditBranding={() => setBrandingOpen(true)}
@@ -760,6 +830,14 @@ function AuditUnfoldWorkspace() {
               }}/>
           </div>}
           {view === 'report' && fullSite && <div className="prism-report-surface" style={theme}>
+            <button
+  type="button"
+  className="prism-back-button"
+  onClick={showReports}
+>
+  <ArrowLeft size={18} />
+  All reports
+</button>
             <div className="prism-full-heading"><h1>Website review</h1><button type="button" onClick={startNew}>New audit</button></div>
             <FullSiteAuditReport result={fullSite} profile={profile}/>
           </div>}
