@@ -829,18 +829,23 @@ useEffect(() => {
                 setHistory(updatedHistory)
               }}/>
           </div>}
-          {view === 'report' && fullSite && <div className="prism-report-surface" style={theme}>
-            <button
-  type="button"
-  className="prism-back-button"
-  onClick={showReports}
->
-  <ArrowLeft size={18} />
-  All reports
-</button>
-            <div className="prism-full-heading"><h1>Website review</h1><button type="button" onClick={startNew}>New audit</button></div>
-            <FullSiteAuditReport result={fullSite} profile={profile}/>
-          </div>}
+          {view === 'report' && fullSite && (
+  <div className="prism-report-surface" style={theme}>
+    <button
+      type="button"
+      className="prism-back-button"
+      onClick={showReports}
+    >
+      <ArrowLeft size={18} />
+      All reports
+    </button>
+
+    <FullSiteAuditReport
+      result={fullSite}
+      profile={profile}
+    />
+  </div>
+)}
         </div>
       </main>
       {brandingOpen && <AuditBrandDialog profile={profile} onClose={() => setBrandingOpen(false)} onSave={(nextProfile) => {

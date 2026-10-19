@@ -1,12 +1,34 @@
+
 "use client";
+
 import "./auditReport.css";
-import { ReportBrand, ReportContact } from "./ReportBrand";
-import type { ReportTypography } from "../lib/reportPresentation";
-import { useReportTypography } from "../lib/reportPresentation";
 import { useState } from "react";
+import {
+  Download,
+  FileText,
+  Globe,
+  Layers,
+  Smartphone,
+  Monitor,
+  Search,
+  Accessibility,
+  Settings2,
+  ChevronRight,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
+
+import { ReportBrand, ReportContact } from "./ReportBrand";
+import { useReportTypography } from "../lib/reportPresentation";
+import type { ReportTypography } from "../lib/reportPresentation";
 import { getProfileFallbacks } from "../lib/templateUtils";
 import type { UserProfile } from "../lib/profileStorage";
-import type { FullSiteAuditResult, LinkCoverage } from "../lib/auditTypes";
+import type {
+  FullSiteAuditResult,
+  LinkCoverage,
+} from "../lib/auditTypes";
+import type { ClientRow } from "../lib/clientAuditReport";
+
 import {
   readClientSections,
   reviewScopeLine,
@@ -14,294 +36,627 @@ import {
   linkCoverageText,
   websiteDisplayName,
 } from "../lib/clientAuditReport";
-import type { ClientRow } from "../lib/clientAuditReport";
+
 import { buildAuditDocument } from "../lib/buildAuditDocument";
 import { groupLighthouseFindings } from "../lib/auditReport";
+
 import {
   FindingEvidence,
   ScoreTable,
   LoadingDiagnostics,
   printAuditHtml,
 } from "./AuditEvidence";
+
 export type { FullSiteAuditResult } from "../lib/auditTypes";
-type Props = { result: FullSiteAuditResult; profile?: Partial<UserProfile> };
-const values = (v: string[] | undefined) => (Array.isArray(v) ? v : []);
+
+type Props = {
+  result: FullSiteAuditResult;
+  profile?: Partial<UserProfile>;
+};
+
+type Tab = "overview" | "pages" | "evidence";
+
+const values = (v: string[] | undefined) =>
+  Array.isArray(v) ? v : [];
+
 function Bullets({ items }: { items: string[] }) {
+  if (!items.length) return null;
+
   return (
-    <ul className="list-disc space-y-2 pl-5 text-sm leading-7 text-secondary-foreground">
-      {items.map((v, i) => (
-        <li key={i}>{v}</li>
+    <ul className="audit-site-bullets">
+      {items.map((item, index) => (
+        <li key={index}>{item}</li>
       ))}
     </ul>
   );
 }
+
 function Priority({
   row,
   index,
-  featured = false,
 }: {
   row: ClientRow;
   index: number;
-  featured?: boolean;
 }) {
   return (
-    <section
-      className={
-        featured
-          ? "mt-6 border-t-2 border-violet-500/25 pt-5"
-          : "border-t border-border pt-4"
-      }
-    >
-      {featured && (
-        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-violet-500">
-          First priority
-        </p>
-      )}
-      <h4
-        className={
-          featured
-            ? "text-lg font-semibold text-foreground"
-            : "font-semibold text-foreground"
-        }
-      >
-        {index + 1}. {row.title}
-      </h4>
-      {row.coverage && (
-        <p className="mt-1 text-xs text-muted-foreground">{row.coverage}</p>
-      )}
-      <p className="mt-2 text-sm leading-7 text-secondary-foreground">
-        <strong>What we found:</strong> {row.observation}
-      </p>
-      {row.impact && (
-        <p className="mt-2 text-sm leading-7 text-secondary-foreground">
-          <strong>Why it matters:</strong> {row.impact}
-        </p>
-      )}
-      {row.help && (
-        <p className="mt-2 text-sm leading-7 text-secondary-foreground">
-          <strong>How we can help:</strong> {row.help}
-        </p>
-      )}
-      {row.evidence.map((line) => (
-        <p key={line} className="mt-2 break-all text-xs text-muted-foreground">
-          {line}
-        </p>
-      ))}
-      {row.loadingContext.map((line) => (
-        <p key={line} className="mt-2 break-all text-xs text-muted-foreground">
-          {line}
-        </p>
-      ))}
-    </section>
+    <details className="audit-site-priority">
+      <summary>
+        <span className="audit-site-priority-number">
+          {index + 1}
+        </span>
+
+        <span className="audit-site-priority-copy">
+          <strong>{row.title}</strong>
+          {row.coverage && <small>{row.coverage}</small>}
+        </span>
+
+        <ChevronRight
+          size={19}
+          className="audit-site-priority-arrow"
+        />
+      </summary>
+
+      <div className="audit-site-priority-content">
+        {row.observation && (
+          <p>
+            <strong>What we found: </strong>
+            {row.observation}
+          </p>
+        )}
+
+        {row.impact && (
+          <p>
+            <strong>Why it matters: </strong>
+            {row.impact}
+          </p>
+        )}
+
+        {row.help && (
+          <p>
+            <strong>How we can help: </strong>
+            {row.help}
+          </p>
+        )}
+
+        {row.evidence.map((line, index) => (
+          <p
+            key={`e-${index}`}
+            className="audit-site-technical-note"
+          >
+            {line}
+          </p>
+        ))}
+
+        {row.loadingContext.map((line, index) => (
+          <p
+            key={`l-${index}`}
+            className="audit-site-technical-note"
+          >
+            {line}
+          </p>
+        ))}
+      </div>
+    </details>
   );
 }
 
-function coverageFor(result: FullSiteAuditResult): LinkCoverage | undefined {
-  if (result.siteReport?.linkCoverage) return result.siteReport.linkCoverage;
+function coverageFor(
+  result: FullSiteAuditResult
+): LinkCoverage | undefined {
+  if (result.siteReport?.linkCoverage) {
+    return result.siteReport.linkCoverage;
+  }
+
   if (!Array.isArray(result.linkChecks)) return undefined;
+
   return {
     selectedCount: result.linkChecks.length,
     verifiedCount: result.linkChecks.filter(
-      (c) => c.status === "reachable" || c.status === "broken",
+      (c) => c.status === "reachable" || c.status === "broken"
     ).length,
-    unverifiedCount: result.linkChecks.filter((c) => c.status === "unverified")
-      .length,
-    brokenCount: result.linkChecks.filter((c) => c.status === "broken").length,
+    unverifiedCount: result.linkChecks.filter(
+      (c) => c.status === "unverified"
+    ).length,
+    brokenCount: result.linkChecks.filter(
+      (c) => c.status === "broken"
+    ).length,
     limited: true,
     ...(result.linkChecks.length
       ? {}
-      : { note: "No internal destination results were recorded in this run." }),
+      : {
+          note: "No internal destination results were recorded in this run.",
+        }),
   };
 }
+
 export function buildReportHtml(
   result: FullSiteAuditResult,
   profile?: Partial<UserProfile>,
   includeEvidence = true,
-  typography?: ReportTypography,
+  typography?: ReportTypography
 ) {
   return buildAuditDocument({
     url: result.discovery?.origin || result.discovery?.url || "",
     pageTitle: websiteDisplayName(
-      result.lightweightResults?.find((p) => p.pageType === "Homepage")?.title,
-      result.discovery?.origin || result.discovery?.url || "",
+      result.lightweightResults?.find(
+        (p) => p.pageType === "Homepage"
+      )?.title,
+      result.discovery?.origin || result.discovery?.url || ""
     ),
     generatedAt: result.generatedAt,
     report: result.siteReport,
     linkCoverage: coverageFor(result),
     deepResults: result.deepResults,
     lightweightResults: result.lightweightResults,
-    profile: { ...getProfileFallbacks(profile), yourLogo: profile?.yourLogo },
+    profile: {
+      ...getProfileFallbacks(profile),
+      yourLogo: profile?.yourLogo,
+    },
     includeEvidence,
     typography,
   });
 }
-export default function FullSiteAuditReport({ result, profile }: Props) {
+
+export default function FullSiteAuditReport({
+  result,
+  profile,
+}: Props) {
+  const [tab, setTab] = useState<Tab>("overview");
   const [message, setMessage] = useState("");
-  const { typography, ready: presentationReady } = useReportTypography();
+
+  const {
+    typography,
+    ready: presentationReady,
+  } = useReportTypography();
+
+  if (!result.success || !result.siteReport) return null;
+
+  const report = result.siteReport;
+  const pages = result.deepResults || [];
+  const discovered = result.lightweightResults || [];
+
+  const findings =
+    report.findingDetails || groupLighthouseFindings(pages);
+
+  const clientSections = readClientSections(report, findings);
+  const scoreItems = siteScoreItems(pages);
+
+  const inspected = discovered.filter(
+    (page) => page.status === "ok"
+  ).length;
+
+  const siteUrl =
+    result.discovery?.origin ||
+    result.discovery?.url ||
+    "";
+
+  const homeTitle = discovered.find(
+    (page) => page.pageType === "Homepage"
+  )?.title;
+
+  const siteName = websiteDisplayName(homeTitle, siteUrl);
+
   const brandProfile = {
     ...getProfileFallbacks(profile),
     yourLogo: profile?.yourLogo,
   };
-  if (!result.success || !result.siteReport) return null;
-  const report = result.siteReport,
-    pages = result.deepResults || [],
-    findings = report.findingDetails || groupLighthouseFindings(pages);
-  const clientSections = readClientSections(report, findings);
-  const scoreItems = siteScoreItems(pages);
-  const inspected =
-    result.lightweightResults?.filter((p) => p.status === "ok").length || 0;
-  const exportReport = (details: boolean) =>
+
+  const priorityRows = clientSections.rows;
+
+  const exportReport = (details: boolean) => {
     setMessage(
-      printAuditHtml(buildReportHtml(result, profile, details, typography))
+      printAuditHtml(
+        buildReportHtml(result, profile, details, typography)
+      )
         ? ""
-        : "Allow pop-ups to open the printable report.",
+        : "Allow pop-ups to open the printable report."
     );
+  };
+
+  const scoreIcons = [
+    Smartphone,
+    Monitor,
+    Search,
+    Accessibility,
+    Settings2,
+  ];
+
   return (
-    <section className="audit-report-workspace space-y-6">
-      <header className="audit-report-header rounded-2xl border border-border bg-card p-6">
-  <ReportBrand profile={brandProfile} />
+    <section className="audit-site-workspace">
 
-  <h2 className="text-2xl font-bold text-foreground">
-    Website review · {inspected}{" "}
-    {inspected === 1 ? "page" : "pages"} inspected
-  </h2>
+      {/* PREMIUM REPORT HEADER */}
+      <header className="audit-site-header">
+        <div className="audit-site-header-top">
+          <div className="audit-site-heading">
+            <span className="audit-site-eyebrow">
+              WEBSITE AUDIT REPORT
+            </span>
 
-  <p className="break-all text-sm text-muted-foreground">
-    {result.discovery?.origin || result.discovery?.url}
-  </p>
+            <h1>Website review of {siteName}</h1>
 
-  <p className="text-xs text-muted-foreground">
-    {reviewScopeLine(pages, inspected)
-      .split(" · ")
-      .slice(1)
-      .join(" · ")
-      .replace(
-        /\b1 representative pages tested\b/g,
-        "1 representative page tested",
-      )}
-    {result.status === "partial" ? " · Some checks unavailable" : ""}
-  </p>
-
-  <p className="text-xs text-muted-foreground">
-    {linkCoverageText(coverageFor(result))}
-  </p>
-
-  <div className="audit-report-actions">
-    <button
-      type="button"
-      disabled={!presentationReady}
-      onClick={() => exportReport(false)}
-    >
-      {presentationReady ? "Export client summary" : "Preparing PDF…"}
-    </button>
-
-    <button
-      type="button"
-      disabled={!presentationReady}
-      onClick={() => exportReport(true)}
-    >
-      Export with evidence
-    </button>
-  </div>
-
-  {message && (
-    <p role="status" className="text-sm text-muted-foreground">
-      {message}
-    </p>
-  )}
-</header>
-      <article className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.03] p-6 sm:p-8">
-        <h3 className="text-lg font-semibold text-foreground">Overview</h3>
-        <p className="mt-3 text-sm leading-7 text-secondary-foreground">
-          {report.executiveSummary}
-        </p>
-        {clientSections.rows[0] && (
-          <Priority row={clientSections.rows[0]} index={0} featured />
-        )}
-        {values(report.strengths).length > 0 && (
-          <>
-            <h4 className="mb-2 mt-5 font-semibold">Your existing strengths</h4>
-            <Bullets items={values(report.strengths)} />
-          </>
-        )}
-      </article>
-      {(clientSections.rows.length > 1 ||
-        clientSections.remainingImpacts.length > 0 ||
-        clientSections.remainingActions.length > 0) && (
-        <article className="rounded-2xl border border-border bg-card p-6">
-          <h3 className="mb-4 text-lg font-semibold text-foreground">
-            Other priorities
-          </h3>
-          <div className="space-y-5">
-            {clientSections.rows.slice(1).map((row, index) => (
-              <Priority key={row.title + index} row={row} index={index + 1} />
-            ))}
+            <p className="audit-site-subtitle">
+              {siteUrl}
+              {result.generatedAt && (
+                <>
+                  {" · "}
+                  {new Date(result.generatedAt).toLocaleDateString(
+                    "en-AU",
+                    {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    }
+                  )}
+                </>
+              )}
+            </p>
           </div>
-          {clientSections.remainingImpacts.length > 0 && (
-            <>
-              <h4 className="mb-2 mt-5 font-semibold">
-                Why this matters for visitors
-              </h4>
-              <Bullets items={clientSections.remainingImpacts} />
-            </>
+
+          <div className="audit-site-header-brand">
+            <ReportBrand profile={brandProfile} />
+          </div>
+        </div>
+
+        <div className="audit-site-header-actions">
+          <button
+            type="button"
+            className="audit-site-primary-button"
+            disabled={!presentationReady}
+            onClick={() => exportReport(false)}
+          >
+            <Download size={19} />
+            {presentationReady
+              ? "Export summary"
+              : "Preparing PDF…"}
+          </button>
+
+          <button
+            type="button"
+            className="audit-site-secondary-button"
+            disabled={!presentationReady}
+            onClick={() => exportReport(true)}
+          >
+            <FileText size={19} />
+            Export with evidence
+          </button>
+
+          {result.status === "partial" && (
+            <span className="audit-site-partial">
+              <AlertCircle size={16} />
+              Some checks unavailable
+            </span>
           )}
-          {clientSections.remainingActions.length > 0 && (
-            <>
-              <h4 className="mb-2 mt-5 font-semibold">How we can help</h4>
-              <Bullets items={clientSections.remainingActions} />
-            </>
-          )}
-        </article>
-      )}
-      <section className="rounded-2xl border border-border bg-card p-6">
-        <h3 className="font-semibold text-foreground">
-          Supporting checks across tested pages
-        </h3>
-        <div className="mt-4 grid grid-cols-2 gap-5 lg:grid-cols-5">
-          {scoreItems.map((item) => (
-            <div key={item.label}>
-              <p className="text-xs text-muted-foreground">{item.label}</p>
-              <p className="mt-2 text-xl font-semibold text-foreground">
-                {item.value ?? item.availability.label}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {item.count} scored {item.count === 1 ? "page" : "pages"}
+        </div>
+
+        {message && (
+          <p role="status" className="audit-site-message">
+            {message}
+          </p>
+        )}
+      </header>
+
+      {/* SECTION TABS */}
+      <nav
+        className="audit-site-tabs"
+        aria-label="Website review sections"
+      >
+        {(["overview", "pages", "evidence"] as const).map(
+          (section) => (
+            <button
+              key={section}
+              type="button"
+              aria-current={
+                tab === section ? "page" : undefined
+              }
+              className={tab === section ? "is-active" : ""}
+              onClick={() => setTab(section)}
+            >
+              {section}
+            </button>
+          )
+        )}
+      </nav>
+
+      {tab === "overview" && (
+        <div className="audit-site-tab-content">
+
+          {/* OVERVIEW FEATURE BANNER */}
+          <section className="audit-site-hero">
+            <div>
+              <span className="audit-site-eyebrow">
+                THE WEBSITE AT A GLANCE
+              </span>
+
+              <h2>
+                A clearer picture of your website
+              </h2>
+
+              <p>
+                {reviewScopeLine(pages, inspected)
+                  .split(" · ")
+                  .slice(1)
+                  .join(" · ")}
               </p>
             </div>
-          ))}
+
+            <div className="audit-site-hero-icon" aria-hidden="true">
+              <Layers size={65} strokeWidth={1.25} />
+            </div>
+          </section>
+
+          {/* COVERAGE METRICS */}
+          <section
+            className="audit-site-coverage"
+            aria-label="Audit coverage"
+          >
+            <div>
+              <Globe size={23} />
+              <strong>{discovered.length}</strong>
+              <span>Pages inspected for discovery</span>
+            </div>
+
+            <div>
+              <CheckCircle2 size={23} />
+              <strong>{inspected}</strong>
+              <span>Pages inspected successfully</span>
+            </div>
+
+            <div>
+              <Monitor size={23} />
+              <strong>{pages.length}</strong>
+              <span>Pages with detailed test results</span>
+            </div>
+          </section>
+
+          {/* SITE SCORE STRIP */}
+          <section
+            className="audit-site-scores"
+            aria-label="Average audit scores"
+          >
+            {scoreItems.map((item, index) => {
+              const ScoreIcon =
+                scoreIcons[index] ?? Settings2;
+
+              const tone =
+                item.value === null
+                  ? "neutral"
+                  : item.value >= 90
+                    ? "good"
+                    : item.value >= 50
+                      ? "warning"
+                      : "poor";
+
+              return (
+                <div
+                  key={item.label}
+                  className={`audit-site-score audit-site-tone-${tone}`}
+                >
+                  <p className="audit-site-score-label">
+                    {item.label}
+                  </p>
+
+                  <div className="audit-site-score-reading">
+                    <span>
+                      {item.value === null ? (
+                        <strong className="audit-site-no-score">
+                          {item.availability.label}
+                        </strong>
+                      ) : (
+                        <>
+                          <strong>{item.value}</strong>
+                          <small>/100</small>
+                        </>
+                      )}
+                    </span>
+
+                    <span className="audit-site-score-icon">
+                      <ScoreIcon size={19} />
+                    </span>
+                  </div>
+
+                  <p className="audit-site-score-count">
+                    {item.count} scored{" "}
+                    {item.count === 1 ? "page" : "pages"}
+                  </p>
+                </div>
+              );
+            })}
+          </section>
+
+          {/* CLIENT SUMMARY + IMPROVEMENTS */}
+          <section className="audit-site-overview-grid">
+            <div className="audit-site-summary">
+              <h3>Client overview</h3>
+
+              <p className="audit-site-summary-text">
+                {report.executiveSummary}
+              </p>
+
+              {values(report.strengths).length > 0 && (
+                <details className="audit-site-strengths">
+                  <summary>
+                    What's already working well
+                  </summary>
+                  <Bullets items={values(report.strengths)} />
+                </details>
+              )}
+            </div>
+
+            <div className="audit-site-priorities">
+              <h3>Where we can help</h3>
+
+              <p className="audit-site-muted">
+                Prioritised improvements based on the tested
+                pages.
+              </p>
+
+              {priorityRows.length ? (
+                priorityRows.map((row, index) => (
+                  <Priority
+                    key={`${row.title}-${index}`}
+                    row={row}
+                    index={index}
+                  />
+                ))
+              ) : (
+                <p className="audit-site-muted">
+                  No prioritised recommendations were
+                  returned by the available checks.
+                </p>
+              )}
+            </div>
+          </section>
+
+          {(clientSections.remainingImpacts.length > 0 ||
+            clientSections.remainingActions.length > 0) && (
+            <section className="audit-site-panel">
+              {clientSections.remainingImpacts.length > 0 && (
+                <>
+                  <h3>Additional visitor impacts</h3>
+                  <Bullets
+                    items={clientSections.remainingImpacts}
+                  />
+                </>
+              )}
+
+              {clientSections.remainingActions.length > 0 && (
+                <>
+                  <h3>Additional recommended actions</h3>
+                  <Bullets
+                    items={clientSections.remainingActions}
+                  />
+                </>
+              )}
+            </section>
+          )}
+
+          <p className="audit-site-footnote">
+            Average scores describe the representative pages
+            tested, not every page on the website. Unavailable
+            scores are excluded. Search, accessibility and
+            technical best-practice averages use mobile runs.
+          </p>
         </div>
-        <p className="mt-4 text-xs leading-6 text-muted-foreground">
-          Averages cover the representative pages tested. Unavailable scores are
-          excluded. Search, accessibility and technical best-practice averages
-          use mobile runs.
-        </p>
-      </section>
-      <details className="rounded-2xl border border-border bg-card p-6">
-        <summary className="cursor-pointer font-semibold text-foreground">
-          Technical evidence and page coverage
-        </summary>
-        <div className="mt-5 space-y-6">
-          <ScoreTable pages={pages} />
-          <FindingEvidence findings={findings} />
-          <LoadingDiagnostics pages={pages} />
-          <ul className="space-y-2 text-xs text-muted-foreground">
-            {result.lightweightResults?.map((p) => (
-              <li key={p.url} className="break-all">
-                {p.finalUrl || p.url} · {p.status}
-                {p.httpStatus ? " · HTTP " + p.httpStatus : ""}
-                {p.error ? " · " + p.error : ""}
-              </li>
-            ))}
-          </ul>
+      )}
+
+      {tab === "pages" && (
+        <div className="audit-site-tab-content">
+          <section className="audit-site-section-heading">
+            <span className="audit-site-eyebrow">
+              PAGE COVERAGE
+            </span>
+
+            <h2>Pages inspected</h2>
+
+            <p>
+              See which public pages were inspected and which
+              pages received detailed testing.
+            </p>
+          </section>
+
+          <div className="audit-site-panel">
+            <div className="audit-site-page-list">
+              {discovered.map((page, index) => (
+                <div
+                  className="audit-site-page-row"
+                  key={`${page.url}-${index}`}
+                >
+                  <span className="audit-site-page-icon">
+                    <FileText size={19} />
+                  </span>
+
+                  <div>
+                    <strong>
+                      {page.title ||
+                        page.pageType ||
+                        "Website page"}
+                    </strong>
+
+                    <span>{page.finalUrl || page.url}</span>
+                  </div>
+
+                  <span
+                    className={
+                      page.status === "ok"
+                        ? "audit-site-page-status is-ok"
+                        : "audit-site-page-status"
+                    }
+                  >
+                    {page.status}
+                  </span>
+
+                  {page.httpStatus && (
+                    <span className="audit-site-page-http">
+                      HTTP {page.httpStatus}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {!discovered.length && (
+              <p className="audit-site-muted">
+                No individual page inspection records
+                were returned.
+              </p>
+            )}
+          </div>
+
+          <section className="audit-site-panel">
+            <h3>Detailed page scores</h3>
+            <ScoreTable pages={pages} />
+          </section>
+
+          <p className="audit-site-footnote">
+            A successful page inspection does not necessarily
+            mean a detailed mobile and desktop audit was
+            completed for that page.
+          </p>
         </div>
-      </details>
-      <article className="rounded-2xl border border-border bg-card p-6">
-        <h3 className="mb-3 font-semibold text-foreground">
-          Coverage and limitations
-        </h3>
-        <Bullets items={values(report.scopeNotes)} />
-      </article>
-      <ReportContact profile={brandProfile} />
+      )}
+
+      {tab === "evidence" && (
+        <div className="audit-site-tab-content">
+          <section className="audit-site-section-heading">
+            <span className="audit-site-eyebrow">
+              TECHNICAL EVIDENCE
+            </span>
+
+            <h2>Explore the supporting checks</h2>
+
+            <p>
+              Review recorded findings, performance diagnostics,
+              coverage and audit limitations.
+            </p>
+          </section>
+
+          <section className="audit-site-panel">
+            <h3>Supporting findings</h3>
+            <FindingEvidence findings={findings} />
+          </section>
+
+          <section className="audit-site-panel">
+            <h3>Loading diagnostics</h3>
+            <LoadingDiagnostics pages={pages} />
+          </section>
+
+          <section className="audit-site-panel">
+            <h3>Link coverage</h3>
+            <p className="audit-site-muted">
+              {linkCoverageText(coverageFor(result))}
+            </p>
+          </section>
+
+          <section className="audit-site-panel">
+            <h3>Coverage and limitations</h3>
+            <Bullets items={values(report.scopeNotes)} />
+          </section>
+        </div>
+      )}
+
+      <div className="audit-site-footer">
+        <ReportContact profile={brandProfile} />
+      </div>
     </section>
   );
 }
