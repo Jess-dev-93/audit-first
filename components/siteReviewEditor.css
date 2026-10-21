@@ -1,0 +1,48 @@
+/* Full-site editor only. Does not change printable reports or the app shell. */
+.audit-site-workspace .audit-review-editor {
+  --review-text: #271436;
+  --review-muted: #71627e;
+  --review-line: #e5ddec;
+  display: grid;
+  gap: 28px;
+  min-width: 0;
+  color: var(--review-text);
+  font-family: var(--audit-font, Arial, sans-serif);
+  color-scheme: light;
+}
+.audit-review-editor *, .audit-review-editor *::before, .audit-review-editor *::after { box-sizing: border-box; }
+.audit-site-workspace .audit-review-editor .audit-review-intro {
+  display: block;
+  margin: 0;
+  padding: 28px;
+  border: 1px solid #e7d9fa;
+  border-radius: 18px;
+  background: linear-gradient(115deg, #f2eafb, #faf7ff);
+}
+.audit-review-editor .audit-review-eyebrow { color: #7943b9; font-size: 14px; font-weight: 700; letter-spacing: .07em; }
+.audit-review-editor h2 { margin: 10px 0 12px; font-size: clamp(26px, 3vw, 34px); line-height: 1.2; letter-spacing: -.025em; color: var(--review-text); }
+.audit-review-editor h3 { margin: 0 0 12px; font-size: 24px; line-height: 1.3; color: var(--review-text); }
+.audit-review-editor p { margin: 0; font-size: 18px; line-height: 1.65; color: var(--review-muted); }
+.audit-review-editor .audit-review-note { margin-top: 12px; font-size: 16px; }
+.audit-review-editor .audit-review-field { min-width: 0; padding: 24px; border: 1px solid var(--review-line); border-radius: 16px; background: #fff; }
+.audit-review-editor label:not(.audit-review-import) { display: block; margin-bottom: 8px; font-size: 18px; line-height: 1.4; font-weight: 650; color: var(--review-text); }
+.audit-review-editor .audit-review-field p { font-size: 16px; margin-bottom: 16px; }
+.audit-review-editor textarea { display: block; width: 100%; min-height: 180px; margin: 16px 0 0; padding: 16px; border: 1px solid #d8cbe6; border-radius: 10px; background: #fdfbff; color: var(--review-text); font: 18px/1.65 var(--audit-font, Arial, sans-serif); resize: vertical; }
+.audit-review-editor textarea:focus-visible { outline: 3px solid #a67bd34d; outline-offset: 2px; border-color: #8651c6; }
+.audit-review-editor .audit-review-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-top: 20px; }
+.audit-review-editor .audit-review-grid .audit-review-field { padding: 20px; }
+.audit-review-editor .audit-review-help { font-size: 16px; line-height: 1.65; }
+.audit-site-workspace .audit-review-editor .audit-review-save { display: block; margin: 0; padding: 24px 0 0; border: 0; border-top: 1px solid var(--review-line); background: transparent; }
+.audit-review-editor .audit-review-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.audit-review-editor .audit-review-actions button, .audit-review-editor .audit-review-import { display: inline-flex; align-items: center; justify-content: center; position: relative; min-height: 52px; margin: 0; padding: 12px 20px; border: 1px solid #d9cbe9; border-radius: 10px; background: #fff; color: #65379c; font: 600 16px/1.5 var(--audit-font, Arial, sans-serif); cursor: pointer; }
+.audit-review-editor .audit-review-actions .audit-review-primary { background: #7b3dc6; border-color: #7b3dc6; color: #fff; }
+.audit-review-editor .audit-review-actions button:hover:not(:disabled), .audit-review-editor .audit-review-import:hover { filter: brightness(.96); }
+.audit-review-editor .audit-review-actions button:disabled { cursor: not-allowed; opacity: .5; }
+.audit-review-editor .audit-review-actions button:focus-visible, .audit-review-editor .audit-review-import:focus-within { outline: 3px solid #a67bd380; outline-offset: 3px; }
+.audit-review-editor .audit-review-import input { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.audit-review-editor .audit-review-status { margin: 16px 0 8px; font-size: 16px; font-weight: 600; color: #65379c; }
+@media (max-width: 1200px) { .audit-review-editor .audit-review-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) {
+  .audit-site-workspace .audit-review-editor .audit-review-intro, .audit-review-editor .audit-review-field { padding: 20px; }
+  .audit-review-editor .audit-review-actions { align-items: stretch; flex-direction: column; }
+}

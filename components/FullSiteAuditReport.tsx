@@ -1,8 +1,11 @@
 
 "use client";
+import ReviewedSiteWorkspace from "./ReviewedSiteWorkspace";
+import { reviewDraftKey } from "../lib/siteReviewDraft";
+
 
 import "./auditReport.css";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Download,
   FileText,
@@ -54,7 +57,7 @@ type Props = {
   profile?: Partial<UserProfile>;
 };
 
-type Tab = "overview" | "pages" | "evidence";
+type Tab = "overview" | "recommendations" | "pages" | "evidence";
 
 const values = (v: string[] | undefined) =>
   Array.isArray(v) ? v : [];
@@ -197,10 +200,11 @@ export function buildReportHtml(
   });
 }
 
-export default function FullSiteAuditReport({
+function FullSiteAuditView({
   result,
   profile,
-}: Props) {
+  reviewEditor,
+}: Props & { reviewEditor?: ReactNode }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [message, setMessage] = useState("");
 
@@ -306,7 +310,7 @@ export default function FullSiteAuditReport({
           >
             <Download size={19} />
             {presentationReady
-              ? "Export summary"
+              ? "Export reviewed report"
               : "Preparing PDF…"}
           </button>
 
@@ -317,7 +321,7 @@ export default function FullSiteAuditReport({
             onClick={() => exportReport(true)}
           >
             <FileText size={19} />
-            Export with evidence
+            Export technical audit
           </button>
 
           {result.status === "partial" && (
@@ -340,7 +344,7 @@ export default function FullSiteAuditReport({
         className="audit-site-tabs"
         aria-label="Website review sections"
       >
-        {(["overview", "pages", "evidence"] as const).map(
+        {(["overview", "recommendations", "pages", "evidence"] as const).map(
           (section) => (
             <button
               key={section}
@@ -356,6 +360,12 @@ export default function FullSiteAuditReport({
           )
         )}
       </nav>
+
+      {tab === "recommendations" && (
+  <div className="audit-site-tab-content">
+    {reviewEditor}
+  </div>
+)}
 
       {tab === "overview" && (
         <div className="audit-site-tab-content">
@@ -658,5 +668,23 @@ export default function FullSiteAuditReport({
         <ReportContact profile={brandProfile} />
       </div>
     </section>
+  );
+}
+
+
+export default function FullSiteAuditReport(props: Props) {
+  return (
+    <ReviewedSiteWorkspace
+      key={reviewDraftKey(props.result)}
+      result={props.result}
+    >
+      {(reviewedResult, reviewEditor) => (
+        <FullSiteAuditView
+          {...props}
+          result={reviewedResult}
+          reviewEditor={reviewEditor}
+        />
+      )}
+    </ReviewedSiteWorkspace>
   );
 }
